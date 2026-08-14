@@ -1,0 +1,108 @@
+.settings-modal { max-width: 480px; }
+
+.settings-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.1rem 0;
+}
+
+.settings-presets-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.settings-presets-btns {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.settings-preset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+.settings-preset-btn:hover {
+  background: var(--surface-2);
+  box-shadow: var(--shadow-md);
+}
+
+.preset-swatch {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.preset-swatch--light { background: #F5F5F7; }
+.preset-swatch--dark  { background: #1C1C1E; }
+
+.settings-colors {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.color-picker-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.color-picker-control {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.color-picker-control input[type="color"] {
+  width: 40px;
+  height: 36px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.color-value {
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.settings-preview {
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  border: 1px solid var(--border);
+  margin: 0.25rem 0;
+}
+
+@media (max-width: 640px) {
+  .settings-colors { grid-template-columns: 1fr; gap: 1rem; }
+  .settings-preview { padding: 0.85rem; }
+}

@@ -1,0 +1,297 @@
+.lists-container {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.lists-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.lists-sidebar-header {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.lists-sidebar-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.lists-sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.4rem;
+}
+
+.lists-sidebar-empty {
+  padding: 1.25rem 0.85rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.lists-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+  overflow: hidden;
+}
+.lists-sidebar-item:hover { background: var(--surface-2); }
+.lists-sidebar-item--active { background: rgba(0, 113, 227, 0.08); }
+.lists-sidebar-item--active:hover { background: rgba(0, 113, 227, 0.12); }
+
+.lists-sidebar-item-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.lists-sidebar-item-title {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lists-sidebar-item--active .lists-sidebar-item-title { color: var(--primary); }
+
+.lists-sidebar-item-count {
+  font-size: 0.73rem;
+  color: var(--muted);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+.lists-sidebar-item--active .lists-sidebar-item-count { color: var(--primary); opacity: 0.65; }
+
+.lists-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+.lists-sidebar-item:hover .lists-delete-btn,
+.lists-item-row:hover .lists-delete-btn { opacity: 1; }
+.lists-delete-btn--visible { opacity: 1; }
+.lists-delete-btn:hover { color: var(--danger); background: rgba(255, 59, 48, 0.08); }
+
+.lists-new-form {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 0.65rem;
+  gap: 0.4rem;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.lists-new-form input {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+}
+.lists-new-form .btn-primary {
+  padding: 0.55rem 0.85rem;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+/* ─── Detail panel ─── */
+.lists-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.lists-detail-header {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.lists-detail-title {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.lists-detail-count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.lists-detail-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.lists-detail-empty {
+  padding: 2rem 1.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.lists-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 1.5rem;
+  transition: background var(--transition-fast);
+}
+.lists-item-row:hover { background: var(--surface); }
+.lists-item-row--checked { opacity: 0.65; }
+
+.lists-check {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  color: #fff;
+}
+.lists-check:hover { border-color: var(--primary); }
+.lists-check--on {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.lists-item-text {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1.4;
+  word-break: break-word;
+  user-select: none;
+}
+.lists-item-text--done {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.lists-section-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.5rem 1.5rem;
+}
+
+.lists-section-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 0.5rem 1.5rem 0.25rem;
+}
+
+.lists-new-item-form {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.lists-new-item-form input {
+  flex: 1;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.875rem;
+}
+.lists-new-item-form .btn-primary {
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.lists-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+}
+.lists-empty-icon { color: var(--muted); opacity: 0.3; }
+.lists-empty h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.lists-empty p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 260px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .lists-sidebar,
+  .lists-detail { width: 100%; }
+
+  .lists-sidebar-scroll { padding: 0.35rem; }
+  .lists-sidebar-item-title { font-size: 0.85rem; }
+  .lists-item-row { padding: 0.55rem 1rem; }
+  .lists-detail-header { padding: 0 1rem; }
+  .lists-new-item-form { padding: 0 1rem; }
+  .lists-new-form { padding: 0 0.5rem; }
+  .lists-section-label { padding: 0.5rem 1rem 0.25rem; }
+  .lists-section-divider { margin: 0.5rem 1rem; }
+  .lists-delete-btn { opacity: 1; }
+}
