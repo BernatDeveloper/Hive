@@ -103,6 +103,11 @@ export default function Calendar({ room, events, primaryColor = '#0071E3' }: Pro
               initialView="dayGridMonth"
               selectable
               selectMirror
+              // Por defecto FullCalendar exige pulsación larga para
+              // seleccionar en táctil (para no chocar con el scroll de
+              // vistas con desplazamiento interno); dayGridMonth no lo
+              // necesita, así que un toque normal ya selecciona el día.
+              selectLongPressDelay={0}
               select={handleSelect}
               eventClick={handleEventClick}
               events={fcEvents}
@@ -115,6 +120,7 @@ export default function Calendar({ room, events, primaryColor = '#0071E3' }: Pro
               }}
               locale="es"
               locales={[esLocale]}
+              eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
               height="100%"
               headerToolbar={{
                 left: 'prev,next',

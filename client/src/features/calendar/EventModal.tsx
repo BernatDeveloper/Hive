@@ -17,6 +17,13 @@ function todayDateStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function addDaysToDateStr(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  date.setDate(date.getDate() + delta)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 // Un evento con hora se guarda como instante UTC (ISO con "Z"); estas dos
 // funciones lo vuelven a expresar en fecha/hora locales para los inputs.
 function isoToLocalDate(iso: string): string {
@@ -42,6 +49,27 @@ function formatDateShort(dateStr: string): string {
 const CAT_ENTRIES = Object.entries(CATEGORIES) as [EventCategory, (typeof CATEGORIES)[EventCategory]][]
 const REC_ENTRIES = Object.entries(RECURRENCE_OPTIONS) as [RecurrenceRule, (typeof RECURRENCE_OPTIONS)[RecurrenceRule]][]
 
+// Selector de hora en 24h propio: el <input type="time"> nativo muestra
+// AM/PM o 24h según el idioma/región del sistema operativo, algo que no se
+// puede forzar de forma fiable desde la web — así queda garantizado siempre.
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+
+function TimeSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const [h, m] = value.split(':')
+  return (
+    <div className="time-select">
+      <select aria-label={`${label} — hora`} value={h} onChange={e => onChange(`${e.target.value}:${m}`)}>
+        {HOURS.map(hh => <option key={hh} value={hh}>{hh}</option>)}
+      </select>
+      <span className="time-select-colon">:</span>
+      <select aria-label={`${label} — minutos`} value={m} onChange={e => onChange(`${h}:${e.target.value}`)}>
+        {MINUTES.map(mm => <option key={mm} value={mm}>{mm}</option>)}
+      </select>
+    </div>
+  )
+}
+
 export default function EventModal({ event, start, end, onSave, onDelete, onClose }: Props) {
   const isEdit = !!event?.id
   const isSeries = !!event?.recurrence_id
@@ -59,9 +87,15 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
   const [startDate, setStartDate] = useState(
     hasExistingTime ? isoToLocalDate(rawStart) : (rawStart.slice(0, 10) || todayDateStr())
   )
-  const [endDate, setEndDate] = useState(
-    hasExistingTime ? isoToLocalDate(rawEnd || rawStart) : (rawEnd.slice(0, 10) || rawStart.slice(0, 10) || todayDateStr())
-  )
+  const [endDate, setEndDate] = useState(() => {
+    if (hasExistingTime) return isoToLocalDate(rawEnd || rawStart)
+    const rawEndDate = rawEnd.slice(0, 10)
+    // FullCalendar da/espera el fin de los eventos de día completo como
+    // fecha EXCLUSIVA (el día siguiente al último día); en el input se
+    // muestra el último día real (inclusivo), por eso restamos uno aquí.
+    if (!rawEndDate) return rawStart.slice(0, 10) || todayDateStr()
+    return addDaysToDateStr(rawEndDate, -1)
+  })
   const [startTime, setStartTime] = useState(hasExistingTime ? isoToLocalTime(rawStart) : '09:00')
   const [endTime,   setEndTime]   = useState(hasExistingTime ? isoToLocalTime(rawEnd || rawStart) : '10:00')
   const [showTime,  setShowTime]  = useState(hasExistingTime)
@@ -110,7 +144,14 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
     // Con hora: instante real en UTC (ISO con "Z"). Día completo: fecha flotante, sin convertir.
     const build = (date: string, time: string) => showTime ? new Date(`${date}T${time}`).toISOString() : date
     const finalStart = build(startDate, startTime)
-    const finalEnd   = isRecurring ? build(startDate, endTime) : build(endDate, endTime)
+    // El input de "Fecha fin" es inclusivo (el último día real del evento),
+    // pero FullCalendar guarda/pinta el fin de los eventos de día completo
+    // como fecha exclusiva (el día siguiente); sumamos uno solo en ese caso.
+    const finalEnd = isRecurring
+      ? build(startDate, endTime)
+      : showTime
+        ? build(endDate, endTime)
+        : addDaysToDateStr(endDate, 1)
 
     onSave({
       id: event?.id,
@@ -262,19 +303,11 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
               <div className="recur-time-row">
                 <div className="recur-time-field">
                   <label>De</label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={e => setStartTime(e.target.value)}
-                  />
+                  <TimeSelect label="De" value={startTime} onChange={setStartTime} />
                 </div>
                 <div className="recur-time-field">
                   <label>A</label>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={e => setEndTime(e.target.value)}
-                  />
+                  <TimeSelect label="A" value={endTime} onChange={setEndTime} />
                 </div>
               </div>
             )}

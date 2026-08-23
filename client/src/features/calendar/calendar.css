@@ -293,6 +293,26 @@
   margin: 0;
 }
 
+/* ── EventModal: selector de hora 24h (De / A) ── */
+.time-select {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.time-select select {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  padding: 0.75rem 0.4rem;
+  text-align: center;
+}
+
+.time-select-colon {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .recur-hint {
   margin: 0;
   font-size: 0.74rem;
