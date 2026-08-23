@@ -29,3 +29,14 @@ export const RECURRENCE_OPTIONS: Record<RecurrenceRule, { label: string; sub: st
   'monthly-last':  { label: 'Último día',     sub: 'del mes' },
   annual:          { label: 'Anual',          sub: '10 años' },
 }
+
+export const REMINDER_OPTIONS: { label: string; value: number | null }[] = [
+  { label: 'Sin recordatorio', value: null },
+  { label: '5 minutos antes',  value: 5 },
+  { label: '15 minutos antes', value: 15 },
+  { label: '30 minutos antes', value: 30 },
+  { label: '1 hora antes',     value: 60 },
+  { label: '2 horas antes',    value: 120 },
+  { label: '1 día antes',      value: 1440 },
+  { label: '2 días antes',     value: 2880 },
+]

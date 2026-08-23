@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import '../../shared/modal.css'
 import './room-settings.css'
 import { socket } from '../../socket'
+import { subscribeToPush, getCurrentSubscription } from '../../push'
 import type { Room } from '../../types'
 
 interface Props {
@@ -43,6 +44,41 @@ export default function RoomSettings({ room, onClose }: Props) {
   function save() {
     socket.emit('update-room-style', { name: room.name, styles: colors })
     onClose()
+  }
+
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushDenied, setPushDenied] = useState(() => 'Notification' in window && Notification.permission === 'denied')
+  const [pushLoading, setPushLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    getCurrentSubscription().then(sub => {
+      if (!cancelled) setPushEnabled(!!sub)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  async function togglePush() {
+    setPushLoading(true)
+    try {
+      if (pushEnabled) {
+        const sub = await getCurrentSubscription()
+        if (sub) {
+          await sub.unsubscribe()
+          socket.emit('unsubscribe-push', { endpoint: sub.endpoint })
+        }
+        setPushEnabled(false)
+      } else {
+        const sub = await subscribeToPush()
+        if (sub) {
+          socket.emit('subscribe-push', { room: room.name, subscription: sub.toJSON() })
+          setPushEnabled(true)
+        }
+        if ('Notification' in window) setPushDenied(Notification.permission === 'denied')
+      }
+    } finally {
+      setPushLoading(false)
+    }
   }
 
   return (
@@ -98,6 +134,31 @@ export default function RoomSettings({ room, onClose }: Props) {
           <button style={{ background: colors.primary_color, color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '8px', cursor: 'default', fontSize: '0.9rem' }}>
             Botón primario
           </button>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-notify-row">
+            <div className="settings-notify-text">
+              <strong>Avisos en este dispositivo</strong>
+              <p>Recibe un aviso cuando un evento esté a punto de empezar, aunque la app esté cerrada.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={pushEnabled}
+              className={`settings-switch${pushEnabled ? ' settings-switch--on' : ''}`}
+              onClick={togglePush}
+              disabled={pushLoading || pushDenied}
+              aria-label="Activar avisos en este dispositivo"
+            >
+              <span className="settings-switch-thumb" />
+            </button>
+          </div>
+          {pushDenied && (
+            <p className="settings-notify-denied">
+              Bloqueaste las notificaciones para este sitio. Actívalas desde los ajustes del navegador para recibir avisos.
+            </p>
+          )}
         </div>
 
         <div className="modal-actions">

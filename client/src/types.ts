@@ -11,6 +11,8 @@ export interface Event {
   category: EventCategory
   recurrence_rule: RecurrenceRule | null
   recurrence_id: string | null
+  reminder_offset: number | null
+  reminder_sent: 0 | 1
 }
 
 export interface Room {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import './auth.css'
-import { socket } from '../../socket'
+import { socket, rememberRoom, forgetRoom } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import HomeScreen from './HomeScreen'
 import CreateRoomForm from './CreateRoomForm'
@@ -8,11 +8,12 @@ import JoinRoomForm from './JoinRoomForm'
 
 interface Props {
   onEnter: (room: Room, events: Event[], lists: List[], listItems: ListItem[], notes: Note[]) => void
+  notice?: string | null
 }
 
 type Mode = 'home' | 'create' | 'join'
 
-export default function RoomEntry({ onEnter }: Props) {
+export default function RoomEntry({ onEnter, notice }: Props) {
   const [mode, setMode] = useState<Mode>('home')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,6 +32,7 @@ export default function RoomEntry({ onEnter }: Props) {
       socket.off('room-error', onRoomError)
       socket.emit('join-room', { name, password })
       socket.once('access-granted', ({ room, events, lists, listItems, notes }: { room: Room; events: Event[]; lists: List[]; listItems: ListItem[]; notes: Note[] }) => {
+        rememberRoom(name, password)
         onEnter(room, events, lists, listItems, notes)
       })
     }
@@ -52,11 +54,13 @@ export default function RoomEntry({ onEnter }: Props) {
 
     function onAccess({ room, events, lists, listItems, notes }: { room: Room; events: Event[]; lists: List[]; listItems: ListItem[]; notes: Note[] }) {
       socket.off('access-denied', onDenied)
+      rememberRoom(name, password)
       onEnter(room, events, lists, listItems, notes)
     }
 
     function onDenied(msg: string) {
       socket.off('access-granted', onAccess)
+      forgetRoom()
       setLoading(false)
       setError(msg)
     }
@@ -67,7 +71,7 @@ export default function RoomEntry({ onEnter }: Props) {
   }
 
   if (mode === 'home') {
-    return <HomeScreen onCreate={() => goTo('create')} onJoin={() => goTo('join')} />
+    return <HomeScreen onCreate={() => goTo('create')} onJoin={() => goTo('join')} notice={notice} />
   }
 
   if (mode === 'create') {

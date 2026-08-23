@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import '../../shared/modal.css'
 import type { Event, EventCategory, RecurrenceRule } from '../../types'
-import { CATEGORIES, RECURRENCE_LABELS, RECURRENCE_OPTIONS } from './categories'
+import { CATEGORIES, RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './categories'
 
 interface Props {
   event?: Partial<Event>
@@ -15,6 +15,18 @@ interface Props {
 function todayDateStr(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Un evento con hora se guarda como instante UTC (ISO con "Z"); estas dos
+// funciones lo vuelven a expresar en fecha/hora locales para los inputs.
+function isoToLocalDate(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function isoToLocalTime(iso: string): string {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function dayOfWeekName(dateStr: string): string {
@@ -38,15 +50,20 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
   const [description, setDescription] = useState(event?.description ?? '')
   const [category, setCategory] = useState<EventCategory>(event?.category ?? 'otro')
   const [recurrence, setRecurrence] = useState<RecurrenceRule>('none')
+  const [reminderOffset, setReminderOffset] = useState<number | null>(event?.reminder_offset ?? null)
 
   // Date state — shared by single and recurring modes
   const rawStart = event?.start ?? start ?? ''
   const rawEnd   = event?.end   ?? end   ?? ''
   const hasExistingTime = rawStart.includes('T')
-  const [startDate, setStartDate] = useState(rawStart.slice(0, 10) || todayDateStr())
-  const [endDate,   setEndDate]   = useState(rawEnd.slice(0, 10)   || rawStart.slice(0, 10) || todayDateStr())
-  const [startTime, setStartTime] = useState(hasExistingTime ? rawStart.slice(11, 16) : '09:00')
-  const [endTime,   setEndTime]   = useState(hasExistingTime ? rawEnd.slice(11, 16)   : '10:00')
+  const [startDate, setStartDate] = useState(
+    hasExistingTime ? isoToLocalDate(rawStart) : (rawStart.slice(0, 10) || todayDateStr())
+  )
+  const [endDate, setEndDate] = useState(
+    hasExistingTime ? isoToLocalDate(rawEnd || rawStart) : (rawEnd.slice(0, 10) || rawStart.slice(0, 10) || todayDateStr())
+  )
+  const [startTime, setStartTime] = useState(hasExistingTime ? isoToLocalTime(rawStart) : '09:00')
+  const [endTime,   setEndTime]   = useState(hasExistingTime ? isoToLocalTime(rawEnd || rawStart) : '10:00')
   const [showTime,  setShowTime]  = useState(hasExistingTime)
 
   const isRecurring  = !isEdit && recurrence !== 'none'
@@ -78,13 +95,15 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
         category,
         recurrence_rule: event?.recurrence_rule ?? null,
         recurrence_id:   event?.recurrence_id   ?? null,
+        reminder_offset: reminderOffset,
       })
       return
     }
     if (!startDate) return
     if (showTime && startTime >= endTime) return
 
-    const build = (date: string, time: string) => showTime ? `${date}T${time}` : date
+    // Con hora: instante real en UTC (ISO con "Z"). Día completo: fecha flotante, sin convertir.
+    const build = (date: string, time: string) => showTime ? new Date(`${date}T${time}`).toISOString() : date
     const finalStart = build(startDate, startTime)
     const finalEnd   = isRecurring ? build(startDate, endTime) : build(endDate, endTime)
 
@@ -99,6 +118,7 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
         ? (event?.recurrence_rule ?? null)
         : (recurrence === 'none' ? null : recurrence),
       recurrence_id: event?.recurrence_id ?? null,
+      reminder_offset: reminderOffset,
     })
   }
 
@@ -244,6 +264,19 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
             {isRecurring && hint && <p className="recur-hint">{hint}</p>}
           </>
         )}
+
+        {/* Reminder */}
+        <label>Recordatorio</label>
+        <select
+          value={reminderOffset === null ? 'none' : String(reminderOffset)}
+          onChange={e => setReminderOffset(e.target.value === 'none' ? null : Number(e.target.value))}
+        >
+          {REMINDER_OPTIONS.map(opt => (
+            <option key={opt.label} value={opt.value === null ? 'none' : String(opt.value)}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
 
         {/* Description */}
         <textarea

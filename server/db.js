@@ -3,6 +3,17 @@ import { scryptSync, randomBytes, timingSafeEqual } from 'crypto'
 
 let db
 
+const VALID_CATEGORIES = new Set(['otro', 'personal', 'trabajo', 'social', 'cumpleanos', 'vacaciones', 'salud'])
+const VALID_REMINDER_OFFSETS = new Set([5, 15, 30, 60, 120, 1440, 2880])
+
+function sanitizeCategory(category) {
+  return VALID_CATEGORIES.has(category) ? category : 'otro'
+}
+
+function sanitizeReminderOffset(offset) {
+  return VALID_REMINDER_OFFSETS.has(offset) ? offset : null
+}
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex')
   const hash = scryptSync(password, salt, 64).toString('hex')
@@ -17,7 +28,9 @@ function verifyPassword(password, stored) {
 }
 
 export function initDb() {
-  db = new Database('calendario.db')
+  const dbPath = process.env.DB_PATH || './calendario.db'
+  db = new Database(dbPath)
+  db.pragma('foreign_keys = ON')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS room (
@@ -40,7 +53,7 @@ export function initDb() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS event (
       id TEXT PRIMARY KEY,
-      room TEXT NOT NULL,
+      room TEXT NOT NULL REFERENCES room(name) ON DELETE CASCADE,
       title TEXT NOT NULL,
       start TEXT NOT NULL,
       end TEXT NOT NULL,
@@ -62,6 +75,12 @@ export function initDb() {
   }
   if (!eventCols.includes('recurrence_id')) {
     db.exec('ALTER TABLE event ADD COLUMN recurrence_id TEXT')
+  }
+  if (!eventCols.includes('reminder_offset')) {
+    db.exec('ALTER TABLE event ADD COLUMN reminder_offset INTEGER')
+  }
+  if (!eventCols.includes('reminder_sent')) {
+    db.exec('ALTER TABLE event ADD COLUMN reminder_sent INTEGER DEFAULT 0')
   }
 
   db.exec(`
@@ -99,6 +118,19 @@ export function initDb() {
       FOREIGN KEY (room) REFERENCES room(name) ON DELETE CASCADE
     )
   `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS push_subscription (
+      id         TEXT PRIMARY KEY,
+      room       TEXT NOT NULL REFERENCES room(name) ON DELETE CASCADE,
+      endpoint   TEXT UNIQUE NOT NULL,
+      p256dh     TEXT NOT NULL,
+      auth       TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  `)
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_event_reminder ON event(reminder_sent, start)')
 }
 
 export function createRoom(name, password) {
@@ -152,43 +184,62 @@ export function getEventById(id) {
 export function createEvent(room, event) {
   const id = crypto.randomUUID()
   const newEvent = {
-    id, room, description: '', category: 'otro',
+    id, room, description: '',
     recurrence_rule: null, recurrence_id: null,
     ...event,
+    category: sanitizeCategory(event.category),
+    reminder_offset: sanitizeReminderOffset(event.reminder_offset),
   }
   db.prepare(`
-    INSERT INTO event (id, room, title, start, end, description, category, recurrence_rule, recurrence_id, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @category, @recurrence_rule, @recurrence_id, datetime('now'))
+    INSERT INTO event (id, room, title, start, end, description, category, recurrence_rule, recurrence_id, reminder_offset, updated_at)
+    VALUES (@id, @room, @title, @start, @end, @description, @category, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
   `).run(newEvent)
   return newEvent
 }
 
 export function createEventsBatch(room, instances) {
   const insert = db.prepare(`
-    INSERT INTO event (id, room, title, start, end, description, category, recurrence_rule, recurrence_id, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @category, @recurrence_rule, @recurrence_id, datetime('now'))
+    INSERT INTO event (id, room, title, start, end, description, category, recurrence_rule, recurrence_id, reminder_offset, updated_at)
+    VALUES (@id, @room, @title, @start, @end, @description, @category, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
   `)
-  const withRoom = instances.map(ev => ({ ...ev, room }))
+  const withRoom = instances.map(ev => ({
+    ...ev,
+    room,
+    category: sanitizeCategory(ev.category),
+    reminder_offset: sanitizeReminderOffset(ev.reminder_offset),
+  }))
   db.transaction(evs => { for (const ev of evs) insert.run(ev) })(withRoom)
   return withRoom
 }
 
 export function updateEvent(event) {
+  const safe = {
+    ...event,
+    category: sanitizeCategory(event.category),
+    reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+  }
   db.prepare(`
     UPDATE event
     SET title = @title, start = @start, end = @end,
-        description = @description, category = @category, updated_at = datetime('now')
+        description = @description, category = @category,
+        reminder_offset = @reminder_offset, updated_at = datetime('now')
     WHERE id = @id
-  `).run(event)
+  `).run(safe)
   return db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
 }
 
 export function updateSeries(event) {
+  const safe = {
+    ...event,
+    category: sanitizeCategory(event.category),
+    reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+  }
   db.prepare(`
     UPDATE event
-    SET title = @title, description = @description, category = @category, updated_at = datetime('now')
+    SET title = @title, description = @description, category = @category,
+        reminder_offset = @reminder_offset, updated_at = datetime('now')
     WHERE recurrence_id = @recurrence_id
-  `).run(event)
+  `).run(safe)
   return db.prepare('SELECT * FROM event WHERE recurrence_id = ?').all(event.recurrence_id)
 }
 
@@ -286,6 +337,7 @@ export function generateRecurrenceInstances(baseEvent, rule) {
       category: baseEvent.category ?? 'otro',
       recurrence_rule: rule,
       recurrence_id: recurrenceId,
+      reminder_offset: baseEvent.reminder_offset ?? null,
     }))
   }
 }
@@ -362,21 +414,71 @@ export function deleteNote(id) {
   db.prepare('DELETE FROM note WHERE id = ?').run(id)
 }
 
+// --- Push notifications ---
+
+export function savePushSubscription(room, subscription) {
+  const { endpoint, keys } = subscription
+  db.prepare(`
+    INSERT INTO push_subscription (id, room, endpoint, p256dh, auth, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(endpoint) DO UPDATE SET
+      room = excluded.room, p256dh = excluded.p256dh, auth = excluded.auth
+  `).run(crypto.randomUUID(), room, endpoint, keys.p256dh, keys.auth, new Date().toISOString())
+}
+
+export function deletePushSubscription(endpoint) {
+  db.prepare('DELETE FROM push_subscription WHERE endpoint = ?').run(endpoint)
+}
+
+export function getRoomSubscriptions(room) {
+  return db.prepare('SELECT endpoint, p256dh, auth FROM push_subscription WHERE room = ?').all(room)
+}
+
+export function getPendingReminderEvents() {
+  const now = Date.now()
+  const horizon = new Date(now + 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString()
+  const past = new Date(now - 6 * 60 * 60 * 1000).toISOString()
+  return db.prepare(`
+    SELECT id, room, title, start, reminder_offset
+    FROM event
+    WHERE reminder_offset IS NOT NULL AND reminder_sent = 0
+      AND start <= ? AND start >= ?
+  `).all(horizon, past)
+}
+
+export function markReminderSent(id) {
+  db.prepare('UPDATE event SET reminder_sent = 1 WHERE id = ?').run(id)
+}
+
+export function resetReminderSent(id) {
+  db.prepare('UPDATE event SET reminder_sent = 0 WHERE id = ?').run(id)
+}
+
 // --- Cleanup ---
 
 export function cleanInactiveRooms() {
-  const result = db.prepare(`
-    DELETE FROM room
-    WHERE name IN (
-      SELECT r.name FROM room r
-      LEFT JOIN event e ON e.room = r.name
-      LEFT JOIN list_item li ON li.room = r.name
-      LEFT JOIN note n ON n.room = r.name
-      GROUP BY r.name
-      HAVING COALESCE(MAX(e.updated_at), MAX(li.updated_at), MAX(n.updated_at), r.created_at) < datetime('now', '-1 year')
-    )
-  `).run()
-  if (result.changes > 0) {
-    console.log(`Cleanup: ${result.changes} inactive rooms deleted`)
-  }
+  const inactiveRooms = db.prepare(`
+    SELECT r.name FROM room r
+    LEFT JOIN event e ON e.room = r.name
+    LEFT JOIN list_item li ON li.room = r.name
+    LEFT JOIN note n ON n.room = r.name
+    GROUP BY r.name
+    HAVING COALESCE(MAX(e.updated_at), MAX(li.updated_at), MAX(n.updated_at), r.created_at) < datetime('now', '-1 year')
+  `).all().map(r => r.name)
+
+  if (inactiveRooms.length === 0) return
+
+  const deleteEvents = db.prepare('DELETE FROM event WHERE room = ?')
+  const deleteRoom = db.prepare('DELETE FROM room WHERE name = ?')
+  // Cinturón y tirantes: borramos los eventos explícitamente aunque la FK
+  // con ON DELETE CASCADE ya lo haría, por si la DB es anterior a esa FK.
+  const cleanup = db.transaction((names) => {
+    for (const name of names) {
+      deleteEvents.run(name)
+      deleteRoom.run(name)
+    }
+  })
+  cleanup(inactiveRooms)
+
+  console.log(`Cleanup: ${inactiveRooms.length} inactive rooms deleted`)
 }

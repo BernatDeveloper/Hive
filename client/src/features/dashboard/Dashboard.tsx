@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import './dashboard.css'
-import { socket } from '../../socket'
+import { socket, forgetRoom } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import ModuleGrid from './ModuleGrid'
@@ -16,7 +16,7 @@ interface Props {
   initialLists: List[]
   initialListItems: ListItem[]
   initialNotes: Note[]
-  onLeave: () => void
+  onLeave: (message?: string) => void
   onUpdateRoom: (room: Room) => void
 }
 
@@ -52,6 +52,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
     text_color: room.text_color,
     sidebar_color: room.sidebar_color,
   })
+  const [events, setEvents] = useState<Event[]>(initialEvents)
   const [lists, setLists] = useState<List[]>(initialLists)
   const [listItems, setListItems] = useState<ListItem[]>(initialListItems)
   const [notes, setNotes] = useState<Note[]>(initialNotes)
@@ -71,6 +72,66 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
     socket.on('style-updated', onStyleUpdated)
     return () => { socket.off('style-updated', onStyleUpdated) }
   }, [onUpdateRoom])
+
+  useEffect(() => {
+    function onCreated(e: Event) { setEvents(prev => [...prev, e]) }
+    function onUpdated(e: Event) { setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev)) }
+    function onDeleted(id: string) { setEvents(prev => prev.filter(ev => ev.id !== id)) }
+    function onBatchCreated(batch: Event[]) { setEvents(prev => [...prev, ...batch]) }
+    function onSeriesUpdated({ events: updated }: { events: Event[] }) {
+      setEvents(prev => prev.map(e => updated.find(u => u.id === e.id) ?? e))
+    }
+    function onSeriesDeleted({ recurrence_id }: { recurrence_id: string }) {
+      setEvents(prev => prev.filter(e => e.recurrence_id !== recurrence_id))
+    }
+
+    socket.on('event-created', onCreated)
+    socket.on('event-updated', onUpdated)
+    socket.on('event-deleted', onDeleted)
+    socket.on('events-created', onBatchCreated)
+    socket.on('series-updated', onSeriesUpdated)
+    socket.on('series-deleted', onSeriesDeleted)
+    return () => {
+      socket.off('event-created', onCreated)
+      socket.off('event-updated', onUpdated)
+      socket.off('event-deleted', onDeleted)
+      socket.off('events-created', onBatchCreated)
+      socket.off('series-updated', onSeriesUpdated)
+      socket.off('series-deleted', onSeriesDeleted)
+    }
+  }, [])
+
+  // Re-sincronización tras reconexión: socket.ts re-emite join-room al
+  // reconectar (ver rememberRoom/forgetRoom). Este listener persistente
+  // captura esa respuesta (el access-granted inicial ya lo consumió
+  // RoomEntry con socket.once) y refresca todo con la foto fresca del
+  // servidor. Si la sala ya no existe (se limpió mientras el cliente
+  // estaba desconectado), volvemos a la pantalla de entrada.
+  useEffect(() => {
+    function onGranted(payload: { room: Room; events: Event[]; lists: List[]; listItems: ListItem[]; notes: Note[] }) {
+      setColors({
+        primary_color: payload.room.primary_color,
+        background_color: payload.room.background_color,
+        text_color: payload.room.text_color,
+        sidebar_color: payload.room.sidebar_color,
+      })
+      onUpdateRoom(payload.room)
+      setEvents(payload.events)
+      setLists(payload.lists)
+      setListItems(payload.listItems)
+      setNotes(payload.notes)
+    }
+    function onDenied() {
+      forgetRoom()
+      onLeave('La sala ya no está disponible. Puede que se haya eliminado por inactividad o que la contraseña haya cambiado.')
+    }
+    socket.on('access-granted', onGranted)
+    socket.on('access-denied', onDenied)
+    return () => {
+      socket.off('access-granted', onGranted)
+      socket.off('access-denied', onDenied)
+    }
+  }, [onUpdateRoom, onLeave])
 
   useEffect(() => {
     function onListCreated(list: List) { setLists(prev => [...prev, list]) }
@@ -145,6 +206,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
 
   function leave() {
     setMenuOpen(false)
+    forgetRoom()
     onLeave()
   }
 
@@ -188,7 +250,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
               <button className="btn-ghost btn-icon" onClick={openSettings} aria-label="Ajustes">
                 <IconSettings />
               </button>
-              <button className="btn-secondary" onClick={onLeave}>Salir</button>
+              <button className="btn-secondary" onClick={leave}>Salir</button>
             </>
           )}
         </div>
@@ -199,7 +261,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         {activeModule === 'calendar' && (
           <Calendar
             room={room.name}
-            initialEvents={initialEvents}
+            events={events}
             primaryColor={colors.primary_color ?? '#0071E3'}
           />
         )}

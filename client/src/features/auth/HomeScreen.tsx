@@ -1,9 +1,10 @@
 interface Props {
   onCreate: () => void
   onJoin: () => void
+  notice?: string | null
 }
 
-export default function HomeScreen({ onCreate, onJoin }: Props) {
+export default function HomeScreen({ onCreate, onJoin, notice }: Props) {
   return (
     <div className="auth-container">
       <div className="auth-card">
@@ -20,6 +21,8 @@ export default function HomeScreen({ onCreate, onJoin }: Props) {
         <p className="auth-subtitle-hero">
           Planifica y organiza con las personas<br />que más importan
         </p>
+
+        {notice && <p className="auth-error" style={{ marginBottom: '1.5rem' }}>{notice}</p>}
 
         <div className="auth-badges">
           <span className="auth-badge">Tiempo real</span>

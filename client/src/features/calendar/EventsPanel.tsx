@@ -13,28 +13,38 @@ type Filter = 'all' | EventCategory
 
 const CAT_ENTRIES = Object.entries(CATEGORIES) as [EventCategory, (typeof CATEGORIES)[EventCategory]][]
 
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return localDateStr(new Date())
 }
 
 function tomorrowStr() {
   const d = new Date()
   d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
+  return localDateStr(d)
 }
 
-function getDateLabel(dateStr: string): string {
-  const date = dateStr.slice(0, 10)
-  if (date === todayStr()) return 'Hoy'
-  if (date === tomorrowStr()) return 'Mañana'
-  const [y, m, d] = date.split('-').map(Number)
+// Evento con hora: guardado como instante UTC ("...Z"), hay que pasarlo a fecha/hora locales.
+// Evento de día completo: fecha flotante "YYYY-MM-DD", se usa tal cual.
+function localDateKey(str: string): string {
+  return str.includes('T') ? localDateStr(new Date(str)) : str
+}
+
+function getDateLabel(dateKey: string): string {
+  if (dateKey === todayStr()) return 'Hoy'
+  if (dateKey === tomorrowStr()) return 'Mañana'
+  const [y, m, d] = dateKey.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
   return dt.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
 function getTimeStr(str: string): string {
   if (!str.includes('T')) return ''
-  const t = str.slice(11, 16)
+  const d = new Date(str)
+  const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   return t === '00:00' ? '' : t
 }
 
@@ -43,13 +53,13 @@ export default function EventsPanel({ events, primaryColor = '#0071E3', onNewEve
 
   const today = todayStr()
   const upcoming = events
-    .filter(e => e.start.slice(0, 10) >= today)
+    .filter(e => localDateKey(e.start) >= today)
     .filter(e => filter === 'all' || e.category === filter)
     .sort((a, b) => a.start.localeCompare(b.start))
 
   const grouped = new Map<string, Event[]>()
   for (const ev of upcoming) {
-    const key = ev.start.slice(0, 10)
+    const key = localDateKey(ev.start)
     if (!grouped.has(key)) grouped.set(key, [])
     grouped.get(key)!.push(ev)
   }
