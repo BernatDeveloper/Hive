@@ -8,7 +8,23 @@ import type { Room } from '../../types'
 interface Props {
   room: Room
   onClose: () => void
+  onLeave: () => void
 }
+
+const IconRefresh = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="1 4 1 10 7 10"/>
+    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+  </svg>
+)
+
+const IconLogOut = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+    <polyline points="16 17 21 12 16 7"/>
+    <line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>
+)
 
 const PRESETS = {
   light: {
@@ -25,7 +41,7 @@ const PRESETS = {
   },
 }
 
-export default function RoomSettings({ room, onClose }: Props) {
+export default function RoomSettings({ room, onClose, onLeave }: Props) {
   const [colors, setColors] = useState({
     primary_color: room.primary_color ?? PRESETS.light.primary_color,
     background_color: room.background_color ?? PRESETS.light.background_color,
@@ -146,12 +162,12 @@ export default function RoomSettings({ room, onClose }: Props) {
               type="button"
               role="switch"
               aria-checked={pushEnabled}
-              className={`settings-switch${pushEnabled ? ' settings-switch--on' : ''}`}
+              className={`toggle-switch${pushEnabled ? ' toggle-switch--on' : ''}`}
               onClick={togglePush}
               disabled={pushLoading || pushDenied}
               aria-label="Activar avisos en este dispositivo"
             >
-              <span className="settings-switch-thumb" />
+              <span className="toggle-switch-thumb" />
             </button>
           </div>
           {pushDenied && (
@@ -161,8 +177,18 @@ export default function RoomSettings({ room, onClose }: Props) {
           )}
         </div>
 
+        <div className="settings-list">
+          <button type="button" className="settings-row" onClick={() => applyPreset('light')}>
+            <span>Restablecer</span>
+            <IconRefresh />
+          </button>
+          <button type="button" className="settings-row settings-row--danger" onClick={onLeave}>
+            <span>Salir de la sala</span>
+            <IconLogOut />
+          </button>
+        </div>
+
         <div className="modal-actions">
-          <button className="btn-ghost" onClick={() => applyPreset('light')}>Restablecer</button>
           <button className="btn-secondary" onClick={onClose}>Cancelar</button>
           <button className="btn-primary" onClick={save}>Guardar</button>
         </div>

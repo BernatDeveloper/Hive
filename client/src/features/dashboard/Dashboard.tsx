@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import './dashboard.css'
 import { socket, forgetRoom } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
-import { useIsMobile } from '../../hooks/useIsMobile'
 import ModuleGrid from './ModuleGrid'
 import type { ModuleId } from './ModuleGrid'
 import Calendar from '../calendar/Calendar'
@@ -45,7 +44,6 @@ function isColorDark(hex: string | null): boolean {
 export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, onLeave, onUpdateRoom }: Props) {
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [colors, setColors] = useState({
     primary_color: room.primary_color,
     background_color: room.background_color,
@@ -56,8 +54,6 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const [lists, setLists] = useState<List[]>(initialLists)
   const [listItems, setListItems] = useState<ListItem[]>(initialListItems)
   const [notes, setNotes] = useState<Note[]>(initialNotes)
-  const isMobile = useIsMobile()
-  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function onStyleUpdated(updatedRoom: Room) {
@@ -169,17 +165,6 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
     }
   }, [])
 
-  useEffect(() => {
-    if (!menuOpen) return
-    function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [menuOpen])
-
   const dark = isColorDark(colors.background_color)
   const cssVars = {
     '--primary': colors.primary_color ?? '#0071E3',
@@ -200,12 +185,10 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   }
 
   function openSettings() {
-    setMenuOpen(false)
     setShowSettings(true)
   }
 
   function leave() {
-    setMenuOpen(false)
     forgetRoom()
     onLeave()
   }
@@ -227,32 +210,9 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         </div>
 
         <div className="dashboard-header-right">
-          {isMobile ? (
-            <div className="hamburger-wrapper" ref={menuRef}>
-              <button
-                className="btn-hamburger"
-                onClick={() => setMenuOpen(prev => !prev)}
-                aria-label="Menú"
-              >
-                <span className={`hamburger-icon ${menuOpen ? 'hamburger-icon--open' : ''}`}>
-                  <span /><span /><span />
-                </span>
-              </button>
-              {menuOpen && (
-                <div className="hamburger-menu">
-                  <button onClick={openSettings}><IconSettings /> Ajustes</button>
-                  <button onClick={leave}>Salir</button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <button className="btn-ghost btn-icon" onClick={openSettings} aria-label="Ajustes">
-                <IconSettings />
-              </button>
-              <button className="btn-secondary" onClick={leave}>Salir</button>
-            </>
-          )}
+          <button className="btn-ghost btn-icon" onClick={openSettings} aria-label="Ajustes">
+            <IconSettings />
+          </button>
         </div>
       </header>
 
@@ -274,7 +234,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
       </main>
 
       {showSettings && (
-        <RoomSettings room={roomWithColors} onClose={() => setShowSettings(false)} />
+        <RoomSettings room={roomWithColors} onClose={() => setShowSettings(false)} onLeave={leave} />
       )}
     </div>
   )

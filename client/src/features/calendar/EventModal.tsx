@@ -68,6 +68,11 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
 
   const isRecurring  = !isEdit && recurrence !== 'none'
   const isMonthBased = recurrence === 'monthly-first' || recurrence === 'monthly-last'
+  const recurrenceOn = recurrence !== 'none'
+
+  function toggleRecurrence() {
+    setRecurrence(prev => prev === 'none' ? 'daily' : 'none')
+  }
 
   function recurrenceHint(): string {
     if (!isRecurring || !startDate) return ''
@@ -166,23 +171,37 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
           </div>
         ) : (
           <>
-            {/* Recurrence selector — only when creating */}
+            {/* Recurrence toggle — only when creating */}
             {!isEdit && (
               <>
-                <label>Repetición</label>
-                <div className="recurrence-grid">
-                  {REC_ENTRIES.map(([key, opt]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`rec-opt${recurrence === key ? ' rec-opt--on' : ''}`}
-                      onClick={() => setRecurrence(key)}
-                    >
-                      <span className="rec-opt-label">{opt.label}</span>
-                      {opt.sub && <span className="rec-opt-sub">{opt.sub}</span>}
-                    </button>
-                  ))}
+                <div className="modal-toggle-row">
+                  <label>Repetición</label>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={recurrenceOn}
+                    className={`toggle-switch${recurrenceOn ? ' toggle-switch--on' : ''}`}
+                    onClick={toggleRecurrence}
+                    aria-label="Activar repetición"
+                  >
+                    <span className="toggle-switch-thumb" />
+                  </button>
                 </div>
+                {recurrenceOn && (
+                  <div className="recurrence-grid">
+                    {REC_ENTRIES.filter(([key]) => key !== 'none').map(([key, opt]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={`rec-opt${recurrence === key ? ' rec-opt--on' : ''}`}
+                        onClick={() => setRecurrence(key)}
+                      >
+                        <span className="rec-opt-label">{opt.label}</span>
+                        {opt.sub && <span className="rec-opt-sub">{opt.sub}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             )}
 

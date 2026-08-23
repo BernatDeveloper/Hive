@@ -60,79 +60,6 @@
 }
 .btn-back-module:hover { background: rgba(0, 113, 227, 0.06); }
 
-/* ─── HAMBURGER MENU ─── */
-.hamburger-wrapper { position: relative; }
-
-.btn-hamburger {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background var(--transition-fast);
-}
-.btn-hamburger:hover { background: rgba(0,0,0,0.05); }
-
-.hamburger-icon {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  width: 18px;
-}
-.hamburger-icon span {
-  display: block;
-  height: 2px;
-  background: var(--text);
-  border-radius: 2px;
-  transition: transform var(--transition-normal), opacity var(--transition-normal), width var(--transition-normal);
-  transform-origin: center;
-}
-.hamburger-icon--open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-.hamburger-icon--open span:nth-child(2) { opacity: 0; width: 0; }
-.hamburger-icon--open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-
-.hamburger-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 0.4rem;
-  min-width: 160px;
-  z-index: 100;
-  box-shadow: var(--shadow-lg);
-  animation: fadeDropdown var(--transition-fast) ease;
-}
-.hamburger-menu button {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.6rem 0.85rem;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-.hamburger-menu button:hover { background: var(--surface-2); }
-
-@keyframes fadeDropdown {
-  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 @media (max-width: 640px) {
   .dashboard { height: 100dvh; }
   .dashboard-header { padding: 0 1rem; height: 52px; }
@@ -145,6 +72,5 @@
   }
   .dashboard-header-right { gap: 0.25rem; }
   .dashboard-header-right .btn-ghost { padding: 0.4rem 0.6rem; font-size: 0.8rem; }
-  .dashboard-header-right .btn-secondary { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
   .btn-back-module { font-size: 0.82rem; padding: 0.3rem 0.5rem; }
 }

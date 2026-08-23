@@ -24,6 +24,8 @@
   padding: 2rem;
   width: 100%;
   max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -51,6 +53,13 @@
   color: var(--muted);
 }
 
+/* Los hijos de un flex column con overflow pueden encogerse por debajo de
+   su tamaño natural cuando falta espacio; el textarea necesita un suelo. */
+.modal textarea {
+  min-height: 5.5rem;
+  flex-shrink: 0;
+}
+
 .modal-actions {
   display: flex;
   gap: 0.5rem;
@@ -58,13 +67,48 @@
   justify-content: flex-end;
 }
 
+/* ── Toggle switch (reutilizable: repetición, notificaciones, ...) ── */
+.modal-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.toggle-switch {
+  flex-shrink: 0;
+  width: 46px;
+  height: 27px;
+  border-radius: 100px;
+  border: none;
+  background: var(--border);
+  padding: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background var(--transition-fast);
+}
+
+.toggle-switch--on { background: var(--success); }
+
+.toggle-switch:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.toggle-switch-thumb {
+  width: 23px;
+  height: 23px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform var(--transition-fast);
+}
+
+.toggle-switch--on .toggle-switch-thumb { transform: translateX(19px); }
+
 @media (max-width: 640px) {
   .modal-overlay { align-items: flex-end; padding: 0; backdrop-filter: blur(4px); }
   .modal {
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     max-width: 100%;
-    max-height: 90vh;
-    overflow-y: auto;
     animation: slideUpModal 0.28s cubic-bezier(0.32, 0.72, 0, 1);
     box-shadow: 0 -4px 32px rgba(0,0,0,0.12);
   }
