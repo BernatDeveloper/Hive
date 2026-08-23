@@ -64,6 +64,9 @@ export default function Calendar({ room, events, primaryColor = '#0071E3' }: Pro
     title: e.title,
     start: e.start,
     end: e.end,
+    backgroundColor: eventColor(e),
+    borderColor: 'transparent',
+    textColor: '#fff',
     extendedProps: { description: e.description, category: e.category },
   }))
 
@@ -111,13 +114,6 @@ export default function Calendar({ room, events, primaryColor = '#0071E3' }: Pro
               select={handleSelect}
               eventClick={handleEventClick}
               events={fcEvents}
-              eventDidMount={(info) => {
-                const ev = events.find(e => e.id === info.event.id)
-                const color = ev ? eventColor(ev) : primaryColor
-                info.el.style.setProperty('background-color', color, 'important')
-                info.el.style.setProperty('border-color', 'transparent', 'important')
-                info.el.style.setProperty('color', '#fff', 'important')
-              }}
               locale="es"
               locales={[esLocale]}
               eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}

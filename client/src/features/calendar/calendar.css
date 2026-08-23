@@ -445,12 +445,9 @@
   font-size: 0.8rem !important;
 }
 
-/* Event chips — color set via eventDidMount JS, override FC default here */
+/* Event chips — color set via backgroundColor/textColor en cada evento */
 .fc .fc-daygrid-event-dot { display: none !important; }
-.fc .fc-h-event {
-  background-color: transparent !important;
-  border: none !important;
-}
+.fc .fc-h-event { border: none !important; }
 .fc .fc-event {
   border-radius: 100px !important;
   border: none !important;
