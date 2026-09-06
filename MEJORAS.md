@@ -288,11 +288,12 @@ el mismo criterio.
   `recurrence_id` desde la fecha de corte). Es el cambio con más enjundia; diseñar
   primero. *Criterio:* "solo este" no toca al resto; "este y siguientes" no toca a
   los anteriores. *(Se apoya en los tests de la Fase 3.)*
-- **Offline + actualización del service worker.** Indicador de estado offline mientras
-  no haya socket (encaja con el fix de conexión de la Tarea C de `TAREAS.md`);
-  opcional, cola de acciones para reenviar al reconectar. Y prompt de "hay una versión
-  nueva, recarga" con `skipWaiting` controlado en `sw.js`. *Criterio:* sin red el
-  usuario lo ve; tras un deploy se le ofrece actualizar.
+- **Offline + actualización del service worker.** ✅ Indicador offline (`ConnectionBanner`,
+  Tarea C) + **cola de acciones**: `socket/queue.ts` `emitWrite`/`emitWriteAck` encolan
+  las escrituras si no hay conexión (o el socket reconectó pero aún no re-hizo
+  `join-room`) y las vacían en orden al recibir `access-granted`; el banner muestra
+  "N cambios sin sincronizar". + prompt de "versión nueva" con `skipWaiting`
+  controlado en `sw.js`.
 - **Presencia en la sala.** Mostrar cuántos/qué dispositivos hay conectados. Se apoya
   en las rooms de Socket.io ya usadas para autorización (Fase 1). Refuerza lo
   colaborativo.

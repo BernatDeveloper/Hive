@@ -301,10 +301,12 @@ features/
   notes/        Notes + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note)
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
+  queue.ts              cola de escrituras offline: emitWrite / emitWriteAck encolan si no hay conexión y vacían en orden al recibir `access-granted`
+  usePendingWrites.ts   hook → nº de escrituras encoladas
   SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
   useConnection.ts      hook → estado de conexión
   usePresence.ts        hook → nº de dispositivos en la sala (>= 1); pide `get-presence` al montar
-  ConnectionBanner.tsx  barra fija "Sin conexión con el servidor" tras 3s de gracia sin conexión (montada en App)
+  ConnectionBanner.tsx  barra fija "Sin conexión…" tras 3s de gracia (+ "N cambios sin sincronizar" si hay cola), montada en App
   authFlow.ts           awaitAuthResponse(): listeners `once` + timeout de red (8s) + connect_error, con cleanup único
   connection-context.ts / connection-banner.css / index.ts (barrel)
 pwa.ts          useServiceWorkerUpdate(): registra el SW, detecta versión en espera, apply() = skipWaiting + reload
@@ -321,9 +323,9 @@ index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo glo
 - **Hooks por dominio** (`useEvents`, `useLists`, `useNotes`, `useRoomStyle`): cada
   uno posee su `useState` (sembrado con los `initial*` de `access-granted`),
   registra sus `socket.on(...)` + cleanup, se auto-refresca desde `access-granted`
-  en reconexión, y expone acciones tipadas que envuelven `socket.emit`. Los
-  componentes de módulo (`Calendar`, `Lists`, `Notes`) reciben datos + callbacks
-  por props y **no importan `socket` ni reciben `room`**.
+  en reconexión, y expone acciones tipadas que envuelven `emitWrite`/`emitWriteAck`
+  (cola offline). Los componentes de módulo (`Calendar`, `Lists`, `Notes`) reciben
+  datos + callbacks por props y **no importan `socket` ni reciben `room`**.
 - `Dashboard` es composición pura (~130 líneas): monta los 4 hooks + navegación.
 - `<App>` va envuelto en `<SocketProvider>` (en `main.tsx`).
 

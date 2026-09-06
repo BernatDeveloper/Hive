@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './connection-banner.css'
 import { useConnection } from './useConnection'
+import { usePendingWrites } from './usePendingWrites'
 
 // Barra fija que aparece cuando el socket lleva un rato sin conexión. Espera una
 // gracia antes de mostrarse para no parpadear en la conexión inicial normal ni
@@ -10,6 +11,7 @@ const GRACE_MS = 3000
 export function ConnectionBanner() {
   const status = useConnection()
   const connected = status === 'connected'
+  const pending = usePendingWrites()
   const [graceElapsed, setGraceElapsed] = useState(false)
 
   // Depende de `connected` (booleano), no de `status`: mientras no hay conexión
@@ -30,6 +32,7 @@ export function ConnectionBanner() {
     <div className="connection-banner" role="status" aria-live="polite">
       <span className="connection-banner-dot" />
       Sin conexión con el servidor. Reintentando…
+      {pending > 0 && ` · ${pending} cambio${pending > 1 ? 's' : ''} sin sincronizar`}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import '../../shared/modal.css'
 import './room-settings.css'
-import { socket } from '../../socket'
+import { socket, emitWrite } from '../../socket'
 import { subscribeToPush, getCurrentSubscription } from '../../push'
 import type { Room } from '../../types'
 
@@ -76,7 +76,7 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
   }
 
   function save() {
-    socket.emit('update-room-style', { name: room.name, styles: { ...colors, event_colors: eventColors } })
+    emitWrite('update-room-style', { name: room.name, styles: { ...colors, event_colors: eventColors } })
     onClose()
   }
 

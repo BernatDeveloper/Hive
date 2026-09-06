@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { socket } from '../../socket'
+import { socket, emitWrite, emitWriteAck } from '../../socket'
 import type { List, ListItem, UndoOffer } from '../../types'
 
 // Estado del módulo de listas: listas y sus ítems. Refresca ambas colecciones
@@ -39,16 +39,10 @@ export function useLists(room: string, initialLists: List[], initialItems: ListI
   return {
     lists,
     listItems,
-    createList: (title: string) => socket.emit('create-list', { room, title }),
-    deleteList: (id: string): Promise<UndoOffer> =>
-      new Promise(resolve => {
-        socket.timeout(5000).emit('delete-list', { room, id }, (_e: unknown, res: UndoOffer) => resolve(res ?? {}))
-      }),
-    createItem: (listId: string, text: string) => socket.emit('create-list-item', { room, listId, text }),
-    toggleItem: (id: string, checked: boolean) => socket.emit('toggle-list-item', { room, id, checked }),
-    deleteItem: (id: string): Promise<UndoOffer> =>
-      new Promise(resolve => {
-        socket.timeout(5000).emit('delete-list-item', { room, id }, (_e: unknown, res: UndoOffer) => resolve(res ?? {}))
-      }),
+    createList: (title: string) => emitWrite('create-list', { room, title }),
+    deleteList: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-list', { room, id }, {}),
+    createItem: (listId: string, text: string) => emitWrite('create-list-item', { room, listId, text }),
+    toggleItem: (id: string, checked: boolean) => emitWrite('toggle-list-item', { room, id, checked }),
+    deleteItem: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-list-item', { room, id }, {}),
   }
 }

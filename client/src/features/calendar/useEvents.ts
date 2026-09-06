@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { socket } from '../../socket'
+import { socket, emitWrite, emitWriteAck } from '../../socket'
 import type { Event, RecurrenceScope, UndoOffer } from '../../types'
 
 // Estado de eventos del calendario: eventos únicos y series recurrentes.
@@ -52,12 +52,10 @@ export function useEvents(room: string, initial: Event[]) {
 
   return {
     events,
-    createEvent: (data: Partial<Event>) => socket.emit('create-event', { room, event: data }),
+    createEvent: (data: Partial<Event>) => emitWrite('create-event', { room, event: data }),
     updateEvent: (data: Partial<Event>, scope?: RecurrenceScope) =>
-      socket.emit('update-event', { room, event: data, scope }),
+      emitWrite('update-event', { room, event: data, scope }),
     deleteEvent: (id: string, scope?: RecurrenceScope): Promise<UndoOffer> =>
-      new Promise(resolve => {
-        socket.timeout(5000).emit('delete-event', { room, id, scope }, (_err: unknown, res: UndoOffer) => resolve(res ?? {}))
-      }),
+      emitWriteAck<UndoOffer>('delete-event', { room, id, scope }, {}),
   }
 }

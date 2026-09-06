@@ -236,11 +236,12 @@ features/
   notes/        Notes + notes.css
   cada feature incluye su hook de dominio: useEvents, useLists, useNotes, useRoomStyle,
   useRoomLost — poseen el estado, los socket.on con cleanup, y las acciones (socket.emit)
-socket/         client.ts (io singleton + rememberRoom/forgetRoom + re-join), SocketProvider
-                (context de estado de conexión), useConnection, usePresence
-                (nº de dispositivos en la sala), ConnectionBanner (barra "Sin
-                conexión" tras 3s), authFlow.ts (awaitAuthResponse: timeout de
-                red 8s en el login), index.ts (barrel)
+socket/         client.ts (io singleton + rememberRoom/forgetRoom + re-join),
+                queue.ts (cola de escrituras offline: emitWrite/emitWriteAck,
+                vacía al reconectar), SocketProvider (context de conexión),
+                useConnection, usePresence, usePendingWrites, ConnectionBanner
+                (barra "Sin conexión · N cambios sin sincronizar"), authFlow.ts
+                (awaitAuthResponse: timeout de red 8s), index.ts (barrel)
 pwa.ts          useServiceWorkerUpdate(): registro del SW + prompt "versión nueva"
 shared/         modal.css (base de modal), color.ts (isColorDark / readableTextColor)
 hooks/          useIsMobile (breakpoint 640px)
