@@ -1,8 +1,6 @@
-import webpush from 'web-push'
-import {
-  getPendingReminderEvents, markReminderSent,
-  getRoomSubscriptions, deletePushSubscription
-} from './db.js'
+import webpush from '../config/webpush.js'
+import { getPendingReminderEvents, markReminderSent } from '../db/events.js'
+import { getRoomSubscriptions, deletePushSubscription } from '../db/push.js'
 
 // Hora efectiva del evento: si es fecha sin hora ("YYYY-MM-DD"), 09:00 locales.
 function effectiveStart(ev) {

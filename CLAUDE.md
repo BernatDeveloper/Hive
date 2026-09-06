@@ -39,7 +39,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 - Toda la sincronización es por Socket.io (no REST para datos de app; solo existe `GET /health`)
 - SQLite guarda los datos en `server/calendario.db`
 - Limpieza automática: salas sin actividad en más de 1 año se eliminan al arrancar el servidor y cada 24h
-- CORS de Socket.io restringido a orígenes explícitos en `server/index.js` (`http://localhost:5173`, `http://localhost:4173`) — hay que mantenerlo en sync con el puerto real del cliente
+- CORS de Socket.io: en dev acepta cualquier puerto de `localhost`/`127.0.0.1` (`isOriginAllowed` en `server/config/cors.js`); en producción solo `ALLOWED_ORIGINS` (`CLIENT_ORIGIN`) y `*.vercel.app` — mantener `CLIENT_ORIGIN` en sync con la URL real del cliente
 
 ## Base de datos (SQLite)
 
@@ -76,7 +76,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 | recurrence_id | TEXT | nullable; UUID compartido por todas las instancias de una serie |
 | updated_at | TEXT | updated on each write, used for cleanup |
 
-- `db.js` migra automáticamente (`ALTER TABLE`) las columnas `category`, `recurrence_rule`, `recurrence_id` si faltan en una DB existente
+- `server/db/migrations.js` migra automáticamente (`ALTER TABLE`) las columnas `category`, `recurrence_rule`, `recurrence_id`, `reminder_offset`, `reminder_sent` si faltan en una DB existente
 
 ### Tabla `list`
 | column | type | notes |
@@ -140,7 +140,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 
 ## Eventos recurrentes
 
-Al crear un evento con `recurrence_rule !== 'none'`, el servidor (`generateRecurrenceInstances` en `db.js`) genera todas las instancias de golpe y las inserta en batch, compartiendo un `recurrence_id`:
+Al crear un evento con `recurrence_rule !== 'none'`, el servidor (`generateRecurrenceInstances` en `server/services/recurrence.js`) genera todas las instancias de golpe y `createEventsBatch` (`server/db/events.js`) las inserta en batch, compartiendo un `recurrence_id`:
 
 | Regla | Horizonte generado |
 |-------|---------------------|
@@ -263,7 +263,37 @@ push.ts         helpers de suscripción a Web Push (subscribeToPush, getCurrentS
 index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo global)
 ```
 
+## Estructura de archivos (server)
+
+```
+index.js              bootstrap: env → webpush → initDb → app/io → handlers → schedulers → listen
+config/
+  env.js              process.loadEnvFile() + objeto `config` (port, clientOrigin, dbPath, vapid)
+  webpush.js          webpush.setVapidDetails con config.vapid
+  cors.js             ALLOWED_ORIGINS, isOriginAllowed, corsOrigin (firma (origin, cb))
+db/
+  connection.js       instancia better-sqlite3 (export `db`) + PRAGMA foreign_keys
+  schema.js           createSchema() — CREATE TABLE IF NOT EXISTS
+  migrations.js       runMigrations() — ALTER TABLE con comprobación + CREATE INDEX
+  index.js            initDb() = createSchema + runMigrations; barrel de las queries
+  rooms.js / events.js / lists.js / notes.js / push.js   queries por dominio
+auth/
+  password.js         hashPassword / verifyPassword (scrypt)
+services/
+  recurrence.js       generateRecurrenceInstances (+ helpers de fecha) — puro, sin DB
+  reminders.js        sendPushToRoom, scheduler de recordatorios (setInterval 60s)
+  cleanup.js          cleanInactiveRooms + startCleanupScheduler (setInterval 24h)
+http/
+  app.js              createApp() — express + cors + json + health
+  io.js               createIo(httpServer) — new Server con cors de config/cors.js
+  health.js           GET /health
+sockets/
+  index.js            registerSocketHandlers(io) — io.on('connection') registra los 6 grupos
+  helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
+  rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
+```
+
 ## Para deploy
 
-- Actualizar origen CORS en `server/index.js` con la URL real del cliente
-- Actualizar URL del socket en `client/src/socket.ts` con la URL real del servidor
+- Actualizar origen CORS: variable de entorno `CLIENT_ORIGIN` (leída en `server/config/env.js`, usada por `server/config/cors.js`)
+- Actualizar URL del socket en `client/src/socket.ts` (variable `VITE_SOCKET_URL`, con fallback a `http://localhost:3001`) con la URL real del servidor
