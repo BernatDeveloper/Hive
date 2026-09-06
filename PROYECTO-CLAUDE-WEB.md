@@ -25,7 +25,7 @@ protegidas con contraseña** y comparten tres módulos: **Calendario**, **Listas
 - **Cliente en TypeScript**, **servidor en JavaScript ESM**.
 - **pnpm siempre**, nunca npm ni yarn.
 - Iconos como componentes SVG inline, sin librería de iconos externa.
-- Contraseñas: `crypto.scryptSync` (Node built-in, sin dependencias extra).
+- Contraseñas: `crypto.scrypt` async (`promisify`, Node built-in); `createRoom`/`verifyRoomAccess` y sus handlers son `async`.
 
 ## Stack
 
@@ -54,10 +54,12 @@ protegidas con contraseña** y comparten tres módulos: **Calendario**, **Listas
 
 ## Base de datos (SQLite)
 
-`server/db/schema.js` crea las tablas con `CREATE TABLE IF NOT EXISTS`;
-`server/db/migrations.js` **migra columnas nuevas con `ALTER TABLE`** comprobando
-antes si existen (`event`: `category`, `color`, `recurrence_rule`, `recurrence_id`,
-`reminder_offset`, `reminder_sent`; `room_style`: `event_colors`).
+Modo **WAL** (`db/connection.js`). `server/db/schema.js` crea las tablas con
+`CREATE TABLE IF NOT EXISTS`; `server/db/migrations.js` **migra columnas nuevas
+con `ALTER TABLE`** comprobando antes si existen (`event`: `category`, `color`,
+`recurrence_rule`, `recurrence_id`, `reminder_offset`, `reminder_sent`;
+`room_style`: `event_colors`) y crea los índices (por `room` en las tablas de
+datos, `list_item(list_id)`, `event(reminder_sent,start)`).
 
 - **room**: `name` (PK), `password_hash` (scrypt + salt aleatoria), `created_at`
 - **room_style**: `room` (PK, FK→room, ON DELETE CASCADE), `primary_color`,
@@ -246,7 +248,7 @@ server/
   lib/                logger.js (niveles, LOG_LEVEL), rateLimit.js (ventana deslizante)
   db/                 connection.js, schema.js, migrations.js, index.js (initDb + barrel),
                       rooms.js, events.js, lists.js, notes.js, push.js
-  auth/password.js    hash + verify (scrypt)
+  auth/password.js    hash + verify (scrypt async)
   services/           recurrence.js (puro), reminders.js (scheduler + push), cleanup.js
   http/               app.js (createApp), io.js (createIo), health.js (GET /health)
   sockets/            index.js (registra), helpers.js, validate.js (formas/longitudes),

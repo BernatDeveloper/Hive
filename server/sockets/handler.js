@@ -2,13 +2,13 @@ import { logger } from '../lib/logger.js'
 import { isNonEmptyString, isAuthedFor } from './helpers.js'
 
 // Registra un handler de socket con manejo de errores uniforme: si el handler
-// lanza, se loguea en el servidor y se avisa al cliente con `errorEvent`
-// (payload `errorPayload`, mensaje en español) en vez de propagar la excepción.
-// El payload siempre llega al handler como objeto (nunca undefined).
+// lanza (o rechaza — soporta handlers async), se loguea en el servidor y se avisa
+// al cliente con `errorEvent` (payload `errorPayload`, mensaje en español) en vez
+// de propagar la excepción. El payload siempre llega al handler como objeto.
 export function safeOn(socket, event, errorEvent, errorPayload, handler) {
-  socket.on(event, (payload = {}) => {
+  socket.on(event, async (payload = {}) => {
     try {
-      handler(payload)
+      await handler(payload)
     } catch (err) {
       logger.error(`socket:${event}`, err)
       socket.emit(errorEvent, errorPayload)
@@ -23,6 +23,6 @@ export function safeOn(socket, event, errorEvent, errorPayload, handler) {
 export function safeAuthedOn(socket, event, errorEvent, errorPayload, handler) {
   safeOn(socket, event, errorEvent, errorPayload, (payload) => {
     if (!isNonEmptyString(payload.room) || !isAuthedFor(socket, payload.room)) return
-    handler(payload)
+    return handler(payload) // devuelve la promesa para que safeOn la espere
   })
 }

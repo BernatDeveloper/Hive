@@ -43,6 +43,16 @@ export function runMigrations() {
     db.exec('ALTER TABLE room_style ADD COLUMN event_colors TEXT')
   }
 
-  // Depende de reminder_sent, por eso va aquí y no en createSchema().
-  db.exec('CREATE INDEX IF NOT EXISTS idx_event_reminder ON event(reminder_sent, start)')
+  // --- Índices ---
+  // `idx_event_reminder` depende de reminder_sent (columna migrada), por eso
+  // todos los índices van aquí y no en createSchema().
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_reminder     ON event(reminder_sent, start);
+    CREATE INDEX IF NOT EXISTS idx_event_room         ON event(room);
+    CREATE INDEX IF NOT EXISTS idx_list_room          ON list(room);
+    CREATE INDEX IF NOT EXISTS idx_list_item_room     ON list_item(room);
+    CREATE INDEX IF NOT EXISTS idx_list_item_list     ON list_item(list_id);
+    CREATE INDEX IF NOT EXISTS idx_note_room          ON note(room);
+    CREATE INDEX IF NOT EXISTS idx_push_sub_room      ON push_subscription(room);
+  `)
 }

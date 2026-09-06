@@ -123,7 +123,25 @@ efectos.
 
 ---
 
-## FASE 2 — Robustez de servidor
+## FASE 2 — Robustez de servidor ✅ HECHA
+
+> Completada.
+> - **Hash async:** `auth/password.js` usa `promisify(crypto.scrypt)`; mismo formato
+>   `<salt>:<hash>` (no invalida contraseñas). `createRoom`/`verifyRoomAccess` →
+>   `async`; `safeOn` ahora hace `await handler(payload)` (soporta handlers async);
+>   los handlers `create-room`/`join-room` son `async`. `createRoom` usa
+>   `INSERT ... ON CONFLICT(name) DO NOTHING` + `changes` como guarda de carrera.
+> - **Push muertas:** ya estaba en `sendPushToRoom` (borra en 404/410); ahora lo
+>   loguea (`logger.info`).
+> - **WAL + índices:** `PRAGMA journal_mode = WAL` en `db/connection.js`
+>   (`.gitignore` cubre `*.db-wal`/`*.db-shm`/`*.db-journal`). Índices en
+>   `db/migrations.js`: `event(room)`, `list(room)`, `list_item(room)`,
+>   `list_item(list_id)` (covering para el cascade), `note(room)`,
+>   `push_subscription(room)`. Verificado con `EXPLAIN QUERY PLAN`: todas las
+>   consultas de carga de sala y del scheduler usan índice.
+> - Verificado: smoke (hash async no bloquea con 5 create-room en paralelo, join
+>   correcto/incorrecto, nombre duplicado, cascade de lista→ítems), migración WAL +
+>   índices sobre la DB real, e2e headless.
 
 **Objetivo:** que el servidor no se bloquee, no acumule basura y consulte rápido.
 Esfuerzo bajo, buen retorno.

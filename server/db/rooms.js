@@ -26,21 +26,25 @@ function parseEventColors(json) {
   }
 }
 
-export function createRoom(name, password) {
+export async function createRoom(name, password) {
   if (db.prepare('SELECT name FROM room WHERE name = ?').get(name)) {
     return { ok: false, error: 'El nombre de sala ya existe' }
   }
-  const hash = hashPassword(password)
-  db.prepare(
-    `INSERT INTO room (name, password_hash, created_at) VALUES (?, ?, datetime('now'))`
+  const hash = await hashPassword(password)
+  // ON CONFLICT: si otra conexión creó la sala mientras hasheábamos, `changes`
+  // será 0 y lo tratamos como nombre ya existente (sin sobrescribir el hash).
+  const info = db.prepare(
+    `INSERT INTO room (name, password_hash, created_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(name) DO NOTHING`
   ).run(name, hash)
+  if (info.changes === 0) return { ok: false, error: 'El nombre de sala ya existe' }
   return { ok: true }
 }
 
-export function verifyRoomAccess(name, password) {
+export async function verifyRoomAccess(name, password) {
   const room = db.prepare('SELECT * FROM room WHERE name = ?').get(name)
   if (!room) return { ok: false, error: 'La sala no existe' }
-  if (!verifyPassword(password, room.password_hash)) {
+  if (!(await verifyPassword(password, room.password_hash))) {
     return { ok: false, error: 'Contraseña incorrecta' }
   }
   const styles = db.prepare('SELECT * FROM room_style WHERE room = ?').get(name)

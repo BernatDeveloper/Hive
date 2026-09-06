@@ -1,6 +1,9 @@
 node_modules/
 dist/
 *.db
+*.db-wal
+*.db-shm
+*.db-journal
 *.log
 .env
 .env.local

@@ -28,10 +28,10 @@ function tooManyAttempts(socket) {
 }
 
 export function registerRoomHandlers(io, socket) {
-  safeOn(socket, 'create-room', 'room-error', 'No se pudo crear la sala', ({ name, password }) => {
+  safeOn(socket, 'create-room', 'room-error', 'No se pudo crear la sala', async ({ name, password }) => {
     if (tooManyAttempts(socket)) return socket.emit('room-error', RATE_LIMITED)
     if (!str(name, MAX.roomName) || !str(password, MAX.password)) return
-    const result = createRoom(name, password)
+    const result = await createRoom(name, password)
     if (!result.ok) {
       socket.emit('room-error', result.error)
       return
@@ -40,10 +40,10 @@ export function registerRoomHandlers(io, socket) {
     socket.emit('room-created', { name })
   })
 
-  safeOn(socket, 'join-room', 'access-denied', 'No se pudo acceder a la sala', ({ name, password }) => {
+  safeOn(socket, 'join-room', 'access-denied', 'No se pudo acceder a la sala', async ({ name, password }) => {
     if (tooManyAttempts(socket)) return socket.emit('access-denied', RATE_LIMITED)
     if (!str(name, MAX.roomName) || !str(password, MAX.password)) return
-    const result = verifyRoomAccess(name, password)
+    const result = await verifyRoomAccess(name, password)
     if (!result.ok) {
       socket.emit('access-denied', result.error)
       return

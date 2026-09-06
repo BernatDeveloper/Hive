@@ -43,6 +43,10 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 
 ## Base de datos (SQLite)
 
+Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficheros
+`calendario.db-wal` y `calendario.db-shm` (gitignored). Índices creados en
+`db/migrations.js`.
+
 ### Tabla `room`
 | column | type | notes |
 |--------|------|-------|
@@ -251,7 +255,7 @@ interface Note {
 - Código en inglés (variables, socket events, function names, CSS classes)
 - Texto de UI para el usuario en español
 - TypeScript en el cliente, JavaScript ESM en el servidor
-- Contraseñas hasheadas con `crypto.scryptSync` (Node built-in, sin dependencias extra)
+- Contraseñas hasheadas con `crypto.scrypt` **async** (`promisify`, Node built-in) — formato `<salt hex>:<hash hex>` (64 bytes); `createRoom`/`verifyRoomAccess` y sus handlers son `async`
 - `socket.once` + cleanup manual para evitar listeners huérfanos en flujos de autenticación (`RoomEntry`); los hooks por dominio usan `socket.on` + cleanup en `useEffect`
 - La instancia del socket vive en `client/src/socket/` (URL de `VITE_SOCKET_URL`, fallback `http://localhost:3001`)
 - Iconos como componentes SVG inline (sin librería de iconos externa)
@@ -303,9 +307,9 @@ lib/
   logger.js           logger mínimo con niveles (error/warn/info/debug, umbral `LOG_LEVEL`, default info)
   rateLimit.js        createRateLimiter({ windowMs, max }) — ventana deslizante en memoria
 db/
-  connection.js       instancia better-sqlite3 (export `db`) + PRAGMA foreign_keys
+  connection.js       instancia better-sqlite3 (export `db`) + PRAGMA journal_mode=WAL, foreign_keys=ON
   schema.js           createSchema() — CREATE TABLE IF NOT EXISTS
-  migrations.js       runMigrations() — ALTER TABLE con comprobación + CREATE INDEX
+  migrations.js       runMigrations() — ALTER TABLE con comprobación + índices (por `room` en event/list/list_item/note/push_subscription, `list_item(list_id)`, `event(reminder_sent,start)`)
   index.js            initDb() = createSchema + runMigrations; barrel de las queries
   rooms.js / events.js / lists.js / notes.js / push.js   queries por dominio
 auth/

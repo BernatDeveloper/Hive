@@ -23,8 +23,11 @@ export async function sendPushToRoom(room, payload) {
     try {
       await webpush.sendNotification(subscription, JSON.stringify(payload))
     } catch (err) {
+      // 410 Gone / 404: la suscripción caducó — borrarla para no reintentar
+      // ni dejar que la tabla crezca con suscripciones muertas.
       if (err.statusCode === 404 || err.statusCode === 410) {
         deletePushSubscription(s.endpoint)
+        logger.info(`push subscription caducada eliminada (${err.statusCode})`)
       } else {
         logger.error('sendPushToRoom', err)
       }
