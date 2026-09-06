@@ -305,7 +305,7 @@ rompe la sincronización en tiempo real existente.
 
 ---
 
-## FASE 6 — Futuro / decisiones de producto — 2/3 hechas
+## FASE 6 — Futuro / decisiones de producto — COMPLETA
 
 > - **Export iCal:** versión pragmática — `client/src/features/calendar/ics.ts`
 >   genera el `.ics` en el cliente (1 `VEVENT` + `RRULE` por serie según su regla,
@@ -318,9 +318,12 @@ rompe la sincronización en tiempo real existente.
 >   `CreateRoomForm` sube el mínimo a 8 y muestra un indicador de fortaleza
 >   (`password-strength.ts`: longitud + variedad → débil/media/fuerte). `join-room`
 >   no re-valida (salas antiguas siguen funcionando). Tests + e2e.
-> - **Tipos compartidos client/server:** no hecho. El de más esfuerzo y menos valor
->   de usuario; queda para cuando se vuelva objetivo (o al hacer el refactor a
->   RRULE / un paquete común).
+> - **Tipos compartidos client/server:** versión pragmática — no un paquete común
+>   (fricción con Vite `fs.allow` / tsconfig), sino un **detector de deriva**:
+>   `server/test/contract.test.js` fija la forma exacta de cada objeto/payload que
+>   emite el servidor; si deriva de `client/src/types.ts`, falla. De hecho ya
+>   destapó una: `event-created`/`events-created` no incluían `reminder_sent` ni
+>   `updated_at` — arreglado (re-SELECT de la fila completa).
 
 **Objetivo:** cambios de fondo o de política, solo cuando se vuelvan objetivo.
 

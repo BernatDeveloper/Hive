@@ -40,7 +40,7 @@ export function createEvent(room, event) {
     INSERT INTO event (id, room, title, start, end, description, category, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
     VALUES (@id, @room, @title, @start, @end, @description, @category, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
   `).run(newEvent)
-  return newEvent
+  return db.prepare('SELECT * FROM event WHERE id = ?').get(id)
 }
 
 export function createEventsBatch(room, instances) {
@@ -56,7 +56,9 @@ export function createEventsBatch(room, instances) {
     reminder_offset: sanitizeReminderOffset(ev.reminder_offset),
   }))
   db.transaction(evs => { for (const ev of evs) insert.run(ev) })(withRoom)
-  return withRoom
+  // Todas comparten recurrence_id (generateRecurrenceInstances). Re-SELECT para
+  // devolver la fila completa (con updated_at, reminder_sent).
+  return db.prepare('SELECT * FROM event WHERE recurrence_id = ? ORDER BY start ASC').all(withRoom[0].recurrence_id)
 }
 
 export function updateEvent(event) {

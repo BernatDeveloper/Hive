@@ -245,6 +245,10 @@ Si una propiedad es null, el componente usa el valor por defecto (paleta clara t
 
 ## Tipos TypeScript (client)
 
+Cliente y servidor **no comparten tipos** (servidor JS ESM). `client/src/types.ts`
+es la fuente; `server/test/contract.test.js` fija la forma exacta de lo que emite
+el servidor y falla si deriva.
+
 ```typescript
 type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-first' | 'monthly-last' | 'annual'
 
@@ -373,6 +377,7 @@ test/
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
   presence.test.js    presence sube al entrar, baja al salir, get-presence bajo demanda
   undo.test.js        undo de evento/serie/lista(+ítems)/nota; token caducado; undo de otra sala rechazado
+  contract.test.js    fija la forma exacta de cada objeto/payload que emite el servidor (drift detector vs client/src/types.ts — no hay tipos compartidos automáticos)
 services/recurrence.test.js   unit: generateRecurrenceInstances (todas las reglas/horizontes, propagación, spans, hora)
 ```
 

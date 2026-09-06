@@ -1,3 +1,7 @@
+// No hay tipos compartidos automáticos con el servidor (JS ESM). Estas formas
+// las fija `server/test/contract.test.js`: si el servidor cambia lo que emite,
+// ese test falla y hay que actualizar aquí.
+
 export type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-first' | 'monthly-last' | 'annual'
 
 // Alcance de una edición/borrado sobre una instancia de serie recurrente.
