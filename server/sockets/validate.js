@@ -2,6 +2,10 @@
 // dependencias. Un payload inválido → el handler hace `return` (o emite su
 // evento de error) y no persiste nada.
 
+// Longitud mínima de contraseña para salas NUEVAS. Las existentes con
+// contraseñas más cortas siguen pudiendo hacer join (no se re-valida).
+export const MIN_PASSWORD = 8
+
 export const MAX = {
   id: 64,          // UUIDs generados en servidor (36); margen por si acaso
   roomName: 60,

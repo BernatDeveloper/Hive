@@ -8,7 +8,7 @@ import { createRateLimiter } from '../lib/rateLimit.js'
 import { isAuthedFor, markAuthed, broadcast } from './helpers.js'
 import { safeOn } from './handler.js'
 import { emitPresence } from './presence.js'
-import { MAX, str, isObject } from './validate.js'
+import { MAX, MIN_PASSWORD, str, isObject } from './validate.js'
 
 // Fuerza bruta: máx. 10 intentos de auth por IP y minuto.
 const authLimiter = createRateLimiter({ windowMs: 60_000, max: 10 })
@@ -32,6 +32,9 @@ export function registerRoomHandlers(io, socket) {
   safeOn(socket, 'create-room', 'room-error', 'No se pudo crear la sala', async ({ name, password }) => {
     if (tooManyAttempts(socket)) return socket.emit('room-error', RATE_LIMITED)
     if (!str(name, MAX.roomName) || !str(password, MAX.password)) return
+    if (password.length < MIN_PASSWORD) {
+      return socket.emit('room-error', `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres`)
+    }
     const result = await createRoom(name, password)
     if (!result.ok) {
       socket.emit('room-error', result.error)

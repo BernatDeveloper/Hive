@@ -69,10 +69,22 @@
   letter-spacing: -0.01em;
 }
 
+.events-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 .events-panel-new {
   font-size: 0.72rem !important;
   padding: 0.3rem 0.65rem !important;
 }
+
+.events-panel-export {
+  padding: 0.3rem 0.4rem !important;
+  color: var(--muted);
+}
+.events-panel-export:disabled { opacity: 0.4; cursor: default; }
 
 .events-panel-filters {
   display: flex;

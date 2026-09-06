@@ -39,7 +39,7 @@ protegidas con contraseña** y comparten tres módulos: **Calendario**, **Listas
 
 ## Arquitectura general
 
-- Acceso por sala: **nombre custom + contraseña obligatoria (mínimo 4 chars)**.
+- Acceso por sala: **nombre custom + contraseña obligatoria**. Salas nuevas: mínimo 8 chars (cliente + servidor, `MIN_PASSWORD`); `join-room` no re-valida longitud.
 - **Toda la sincronización de datos va por Socket.io.** No hay REST para datos de
   app; el único endpoint HTTP es `GET /health`.
 - SQLite en `server/calendario.db`.
@@ -227,9 +227,9 @@ interface Note     { id: string; room: string; title: string; body: string; crea
 
 ```
 features/
-  auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css
+  auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts
   dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio)
+  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), ics.ts (export .ics)
   lists/        Lists + lists.css
   settings/     RoomSettings + room-settings.css
   notes/        Notes + notes.css

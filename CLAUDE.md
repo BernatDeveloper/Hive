@@ -38,7 +38,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 
 ## Arquitectura general
 
-- Acceso por sala: nombre custom + contraseña obligatoria (mínimo 4 chars)
+- Acceso por sala: nombre custom + contraseña obligatoria. Salas **nuevas**: mínimo 8 chars, validado en cliente (`CreateRoomForm` + indicador de fortaleza) y en servidor (`MIN_PASSWORD` en `sockets/validate.js`). `join-room` no re-valida longitud (salas antiguas con contraseñas cortas siguen funcionando)
 - Toda la sincronización es por Socket.io (no REST para datos de app; solo existe `GET /health`)
 - SQLite guarda los datos en `server/calendario.db`
 - Limpieza automática: salas sin actividad en más de 1 año se eliminan al arrancar el servidor y cada 24h
@@ -182,7 +182,7 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 ## Flujo de usuario
 
 1. Pantalla de inicio → "Crear sala" o "Unirse a sala"
-2. Crear: nombre + contraseña + confirmación → `create-room` → auto-join → Dashboard
+2. Crear: nombre + contraseña (mín. 8, con indicador de fortaleza) + confirmación → `create-room` → auto-join → Dashboard
 3. Unirse: nombre + contraseña → `join-room` → Dashboard
    - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
 4. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
@@ -191,6 +191,7 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 7. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
 8. Presencia: el header del Dashboard muestra un punto + número si hay más de un dispositivo conectado a la sala
 9. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
+10. Calendario → botón ⬇ en el panel de "Próximos": descarga un `.ics` con todos los eventos (`features/calendar/ics.ts`, generado en cliente)
 
 ## Estructura de componentes
 
@@ -290,9 +291,9 @@ interface Note {
 
 ```
 features/
-  auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css
+  auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística)
   dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave)
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents
+  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto)
   lists/        Lists + lists.css, useLists
   settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
   notes/        Notes + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note)

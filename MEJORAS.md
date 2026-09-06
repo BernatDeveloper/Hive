@@ -301,7 +301,22 @@ rompe la sincronización en tiempo real existente.
 
 ---
 
-## FASE 6 — Futuro / decisiones de producto
+## FASE 6 — Futuro / decisiones de producto — 2/3 hechas
+
+> - **Export iCal:** versión pragmática — `client/src/features/calendar/ics.ts`
+>   genera el `.ics` en el cliente (1 `VEVENT` + `RRULE` por serie según su regla,
+>   `COUNT` = tamaño del grupo; `VEVENT` individual para eventos sueltos y para
+>   instancias desenganchadas). Botón ⬇ en `EventsPanel`. **Sin** el refactor a
+>   RRULE de fondo (las instancias se siguen materializando en la DB). Verificado
+>   e2e (descarga, VCALENDAR, nº de VEVENT, RRULE, CRLF).
+> - **Política de contraseñas:** `MIN_PASSWORD = 8` en `sockets/validate.js`,
+>   validado también en `create-room` (antes solo en el cliente).
+>   `CreateRoomForm` sube el mínimo a 8 y muestra un indicador de fortaleza
+>   (`password-strength.ts`: longitud + variedad → débil/media/fuerte). `join-room`
+>   no re-valida (salas antiguas siguen funcionando). Tests + e2e.
+> - **Tipos compartidos client/server:** no hecho. El de más esfuerzo y menos valor
+>   de usuario; queda para cuando se vuelva objetivo (o al hacer el refactor a
+>   RRULE / un paquete común).
 
 **Objetivo:** cambios de fondo o de política, solo cuando se vuelvan objetivo.
 

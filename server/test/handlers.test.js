@@ -35,8 +35,19 @@ test('create-room: éxito y nombre duplicado', async () => {
   s.emit('create-room', { name, password: 'test1234' })
   assert.deepEqual(await once(s, 'room-created'), { name })
 
-  s.emit('create-room', { name, password: 'otra' })
+  s.emit('create-room', { name, password: 'otra-clave' })
   assert.match(await once(s, 'room-error'), /ya existe/i)
+})
+
+test('create-room: rechaza contraseñas de menos de 8 caracteres', async () => {
+  const s = client('10.2.9.1')
+  await once(s, 'connect')
+  s.emit('create-room', { name: 'short-' + Math.random().toString(36).slice(2, 7), password: 'abc123' })
+  assert.match(await once(s, 'room-error'), /al menos 8/i)
+
+  const name = 'ok8-' + Math.random().toString(36).slice(2, 7)
+  s.emit('create-room', { name, password: 'abcd1234' })
+  assert.deepEqual(await once(s, 'room-created'), { name })
 })
 
 test('join-room: contraseña correcta vs incorrecta', async () => {

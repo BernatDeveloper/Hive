@@ -88,6 +88,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         {activeModule === 'calendar' && (
           <Calendar
             events={cal.events}
+            roomName={room.name}
             primaryColor={colors.primary_color ?? '#0071E3'}
             paletteColors={eventColors}
             onCreateEvent={cal.createEvent}

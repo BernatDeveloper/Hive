@@ -1,13 +1,23 @@
 import { useState } from 'react'
 import type { Event } from '../../types'
+import { downloadICS } from './ics'
 
 interface Props {
   events: Event[]
+  roomName: string
   primaryColor?: string
   paletteColors: string[]
   onNewEvent: () => void
   onEventClick: (event: Event) => void
 }
+
+const IconDownload = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+)
 
 // 'all' o un hex de la paleta de la sala.
 type Filter = 'all' | string
@@ -47,7 +57,7 @@ function getTimeStr(str: string): string {
   return t === '00:00' ? '' : t
 }
 
-export default function EventsPanel({ events, primaryColor = '#0071E3', paletteColors, onNewEvent, onEventClick }: Props) {
+export default function EventsPanel({ events, roomName, primaryColor = '#0071E3', paletteColors, onNewEvent, onEventClick }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
 
   // La paleta puede haber cambiado: si el color filtrado ya no existe, "Todos".
@@ -70,7 +80,18 @@ export default function EventsPanel({ events, primaryColor = '#0071E3', paletteC
     <aside className="events-panel">
       <div className="events-panel-header">
         <span className="events-panel-title">Próximos</span>
-        <button className="btn-primary events-panel-new" onClick={onNewEvent}>+ Nuevo</button>
+        <div className="events-panel-actions">
+          <button
+            className="btn-ghost btn-icon events-panel-export"
+            onClick={() => downloadICS(events, roomName)}
+            disabled={events.length === 0}
+            title="Exportar calendario (.ics)"
+            aria-label="Exportar calendario a iCal"
+          >
+            <IconDownload />
+          </button>
+          <button className="btn-primary events-panel-new" onClick={onNewEvent}>+ Nuevo</button>
+        </div>
       </div>
 
       {paletteColors.length > 0 && (

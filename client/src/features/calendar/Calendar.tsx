@@ -13,6 +13,7 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Props {
   events: Event[]
+  roomName: string
   primaryColor?: string
   paletteColors: string[]
   onCreateEvent: (data: Partial<Event>) => void
@@ -27,7 +28,7 @@ interface ModalState {
   end?: string
 }
 
-export default function Calendar({ events, primaryColor = '#0071E3', paletteColors, onCreateEvent, onUpdateEvent, onDeleteEvent }: Props) {
+export default function Calendar({ events, roomName, primaryColor = '#0071E3', paletteColors, onCreateEvent, onUpdateEvent, onDeleteEvent }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [mobileView, setMobileView] = useState<'calendar' | 'events'>('calendar')
   const isMobile = useIsMobile()
@@ -96,6 +97,7 @@ export default function Calendar({ events, primaryColor = '#0071E3', paletteColo
         {(!isMobile || mobileView === 'events') && (
           <EventsPanel
             events={events}
+            roomName={roomName}
             primaryColor={primaryColor}
             paletteColors={paletteColors}
             onNewEvent={() => setModal({ open: true })}
