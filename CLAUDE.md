@@ -141,7 +141,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 }
 ```
 
-El payload `styles` de `update-room-style` puede incluir `event_colors: string[]` (la paleta); si se omite, el servidor conserva la guardada. Se sanea a hex `#rrggbb`, sin duplicados, tope 12.
+El payload `styles` de `update-room-style` puede incluir `event_colors: string[]` (la paleta); si se omite, el servidor conserva la guardada. Se sanea a hex `#rrggbb`, sin duplicados, tope 8.
 
 ## Eventos recurrentes
 

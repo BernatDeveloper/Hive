@@ -2,10 +2,10 @@ import { db } from './connection.js'
 import { hashPassword, verifyPassword } from '../auth/password.js'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
-const MAX_EVENT_COLORS = 12
+const MAX_EVENT_COLORS = 8
 
 // Normaliza la paleta de colores de evento: array de hex #rrggbb, sin
-// duplicados, tope de 12. Devuelve [] ante cualquier entrada inválida.
+// duplicados, tope de 8. Devuelve [] ante cualquier entrada inválida.
 function sanitizeEventColors(value) {
   if (!Array.isArray(value)) return []
   const seen = new Set()

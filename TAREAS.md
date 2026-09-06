@@ -204,7 +204,7 @@ el server con la sala abierta y vuelve, el estado se resincroniza solo.
 
 > Completada (D0 storage = columna JSON `event_colors` en `room_style`).
 > - **Server:** `event.color TEXT` + `room_style.event_colors TEXT` (schema + migración con
->   comprobación). `db/rooms.js` sanea/persiste la paleta (hex #rrggbb, sin dup, tope 12) y
+>   comprobación). `db/rooms.js` sanea/persiste la paleta (hex #rrggbb, sin dup, tope 8) y
 >   la devuelve en `access-granted`; `update-room-style` sin `event_colors` conserva la
 >   guardada. `db/events.js` `sanitizeColor` en INSERT/UPDATE de las 4 funciones;
 >   `recurrence.js` propaga `color` a las instancias.

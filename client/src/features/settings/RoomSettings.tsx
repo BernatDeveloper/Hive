@@ -41,7 +41,7 @@ const PRESETS = {
   },
 }
 
-const MAX_EVENT_COLORS = 12
+const MAX_EVENT_COLORS = 8
 // Colores que propone "+ Añadir" antes de que el usuario los ajuste.
 const SUGGESTED_COLORS = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff375f', '#ff453a', '#64d2ff', '#ffd60a']
 
