@@ -296,9 +296,11 @@ index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo glo
 ```
 index.js              bootstrap: env → webpush → initDb → app/io → handlers → schedulers → listen
 config/
-  env.js              process.loadEnvFile() + objeto `config` (port, clientOrigin, dbPath, vapid)
+  env.js              process.loadEnvFile() + valida VAPID_* (falla rápido, exit 1) + objeto `config`
   webpush.js          webpush.setVapidDetails con config.vapid
   cors.js             ALLOWED_ORIGINS, isOriginAllowed, corsOrigin (firma (origin, cb))
+lib/
+  logger.js           logger mínimo con niveles (error/warn/info/debug, umbral `LOG_LEVEL`, default info)
 db/
   connection.js       instancia better-sqlite3 (export `db`) + PRAGMA foreign_keys
   schema.js           createSchema() — CREATE TABLE IF NOT EXISTS
@@ -318,8 +320,14 @@ http/
 sockets/
   index.js            registerSocketHandlers(io) — io.on('connection') registra los 6 grupos
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
-  rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
+  handler.js          safeOn(socket, event, errorEvent, errorPayload, fn) — try/catch + logger + emit de error al cliente
+  rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio (todos vía safeOn)
 ```
+
+- **Errores de handler:** cada handler se registra con `safeOn`; una excepción se
+  loguea (`logger.error('socket:<event>', err)`) y emite su evento de error al
+  cliente (`event-error`/`list-error`/`note-error`/`room-error`/`access-denied`/`push-error`),
+  nunca tumba el proceso. Nada de `console.*` en el server salvo el mensaje fatal de `env.js`.
 
 ## Para deploy
 

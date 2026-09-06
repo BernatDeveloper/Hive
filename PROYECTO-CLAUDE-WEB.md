@@ -242,13 +242,15 @@ index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo glo
 
 server/
   index.js            bootstrap (env → webpush → initDb → app/io → handlers → schedulers)
-  config/             env.js, webpush.js, cors.js
+  config/             env.js (valida VAPID_*, exit 1 si falta), webpush.js, cors.js
+  lib/logger.js       logger con niveles (LOG_LEVEL, default info)
   db/                 connection.js, schema.js, migrations.js, index.js (initDb + barrel),
                       rooms.js, events.js, lists.js, notes.js, push.js
   auth/password.js    hash + verify (scrypt)
   services/           recurrence.js (puro), reminders.js (scheduler + push), cleanup.js
   http/               app.js (createApp), io.js (createIo), health.js (GET /health)
-  sockets/            index.js (registra), helpers.js, + un módulo por dominio
+  sockets/            index.js (registra), helpers.js, handler.js (safeOn: try/catch +
+                      logger + emit de error), + un módulo por dominio (todos vía safeOn)
 ```
 
 ## Para deploy

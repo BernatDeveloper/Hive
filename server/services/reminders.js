@@ -1,6 +1,7 @@
 import webpush from '../config/webpush.js'
 import { getPendingReminderEvents, markReminderSent } from '../db/events.js'
 import { getRoomSubscriptions, deletePushSubscription } from '../db/push.js'
+import { logger } from '../lib/logger.js'
 
 // Hora efectiva del evento: si es fecha sin hora ("YYYY-MM-DD"), 09:00 locales.
 function effectiveStart(ev) {
@@ -25,7 +26,7 @@ export async function sendPushToRoom(room, payload) {
       if (err.statusCode === 404 || err.statusCode === 410) {
         deletePushSubscription(s.endpoint)
       } else {
-        console.error('[sendPushToRoom]', err)
+        logger.error('sendPushToRoom', err)
       }
     }
   }))
@@ -49,7 +50,7 @@ function runReminderTick() {
       }
     }
   } catch (e) {
-    console.error('[reminderTick]', e)
+    logger.error('reminderTick', e)
   }
 }
 

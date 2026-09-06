@@ -1,4 +1,5 @@
 import { db } from '../db/connection.js'
+import { logger } from '../lib/logger.js'
 
 // Borra salas sin actividad (evento / ítem de lista / nota) en más de 1 año.
 export function cleanInactiveRooms() {
@@ -25,7 +26,7 @@ export function cleanInactiveRooms() {
   })
   cleanup(inactiveRooms)
 
-  console.log(`Cleanup: ${inactiveRooms.length} inactive rooms deleted`)
+  logger.info(`Cleanup: ${inactiveRooms.length} inactive rooms deleted`)
 }
 
 export function startCleanupScheduler() {

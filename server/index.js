@@ -8,9 +8,10 @@ import { createIo } from './http/io.js'
 import { registerSocketHandlers } from './sockets/index.js'
 import { startCleanupScheduler } from './services/cleanup.js'
 import { startReminderScheduler } from './services/reminders.js'
+import { logger } from './lib/logger.js'
 
-process.on('uncaughtException', (err) => console.error('[uncaughtException]', err))
-process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err))
+process.on('uncaughtException', (err) => logger.error('uncaughtException', err))
+process.on('unhandledRejection', (err) => logger.error('unhandledRejection', err))
 
 initDb()
 
@@ -24,5 +25,5 @@ startCleanupScheduler()
 startReminderScheduler()
 
 httpServer.listen(config.port, '0.0.0.0', () => {
-  console.log(`Server running on port ${config.port}`)
+  logger.info(`Server running on port ${config.port}`)
 })
