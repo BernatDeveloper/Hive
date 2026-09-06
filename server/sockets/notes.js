@@ -1,32 +1,30 @@
 import { createNote, updateNote, deleteNote } from '../db/index.js'
-import { isNonEmptyString, isAuthedFor, broadcast } from './helpers.js'
-import { safeOn } from './handler.js'
+import { broadcast } from './helpers.js'
+import { safeAuthedOn } from './handler.js'
+import { MAX, str, isObject } from './validate.js'
 
 export function registerNoteHandlers(io, socket) {
-  safeOn(socket, 'create-note', 'note-error', { message: 'No se pudo crear la nota' }, ({ room, title }) => {
-    if (!isNonEmptyString(room)) return
-    if (!isAuthedFor(socket, room)) return
-    const safeTitle = typeof title === 'string' && title.trim() ? title.trim() : 'Sin título'
+  safeAuthedOn(socket, 'create-note', 'note-error', { message: 'No se pudo crear la nota' }, ({ room, title }) => {
+    const trimmed = typeof title === 'string' ? title.trim() : ''
+    const safeTitle = trimmed && trimmed.length <= MAX.noteTitle ? trimmed : 'Sin título'
     const note = createNote(room, safeTitle)
     broadcast(io, room, 'note-created', note)
   })
 
-  safeOn(socket, 'update-note', 'note-error', { message: 'No se pudo actualizar la nota' }, ({ room, note }) => {
-    if (!isNonEmptyString(room)) return
-    if (!isAuthedFor(socket, room)) return
-    if (typeof note !== 'object' || note === null || !isNonEmptyString(note.id)) return
+  safeAuthedOn(socket, 'update-note', 'note-error', { message: 'No se pudo actualizar la nota' }, ({ room, note }) => {
+    if (!isObject(note) || !str(note.id, MAX.id)) return
     const safeNote = {
       id: note.id,
-      title: typeof note.title === 'string' ? note.title : '',
-      body: typeof note.body === 'string' ? note.body : '',
+      title: typeof note.title === 'string' ? note.title.slice(0, MAX.noteTitle) : '',
+      body: typeof note.body === 'string' ? note.body.slice(0, MAX.noteBody) : '',
     }
     const updated = updateNote(safeNote)
+    if (!updated) return // id inexistente: nada que difundir
     broadcast(io, room, 'note-updated', updated)
   })
 
-  safeOn(socket, 'delete-note', 'note-error', { message: 'No se pudo eliminar la nota' }, ({ room, id }) => {
-    if (!isNonEmptyString(room) || !isNonEmptyString(id)) return
-    if (!isAuthedFor(socket, room)) return
+  safeAuthedOn(socket, 'delete-note', 'note-error', { message: 'No se pudo eliminar la nota' }, ({ room, id }) => {
+    if (!str(id, MAX.id)) return
     deleteNote(id)
     broadcast(io, room, 'note-deleted', id)
   })

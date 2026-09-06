@@ -243,15 +243,19 @@ index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo glo
 server/
   index.js            bootstrap (env → webpush → initDb → app/io → handlers → schedulers)
   config/             env.js (valida VAPID_*, exit 1 si falta), webpush.js, cors.js
-  lib/logger.js       logger con niveles (LOG_LEVEL, default info)
+  lib/                logger.js (niveles, LOG_LEVEL), rateLimit.js (ventana deslizante)
   db/                 connection.js, schema.js, migrations.js, index.js (initDb + barrel),
                       rooms.js, events.js, lists.js, notes.js, push.js
   auth/password.js    hash + verify (scrypt)
   services/           recurrence.js (puro), reminders.js (scheduler + push), cleanup.js
   http/               app.js (createApp), io.js (createIo), health.js (GET /health)
-  sockets/            index.js (registra), helpers.js, handler.js (safeOn: try/catch +
-                      logger + emit de error), + un módulo por dominio (todos vía safeOn)
+  sockets/            index.js (registra), helpers.js, validate.js (formas/longitudes),
+                      handler.js (safeOn / safeAuthedOn), + un módulo por dominio
 ```
+
+Seguridad de socket: `safeAuthedOn` exige `join-room` para la sala antes de
+escribir/leer datos; `create-room`/`join-room` con rate limit por IP (10/min);
+cada handler valida forma y longitudes del payload en el borde.
 
 ## Para deploy
 

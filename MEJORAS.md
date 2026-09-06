@@ -69,7 +69,25 @@ y llegan al cliente.
 
 ---
 
-## FASE 1 — Seguridad crítica
+## FASE 1 — Seguridad crítica ✅ HECHA
+
+> Completada.
+> - **Autorización por sala:** ya estaba (Tarea A: `isAuthedFor`/`markAuthed`).
+>   Hecha estructural con `safeAuthedOn` en `sockets/handler.js` — los 12 handlers
+>   de datos (events×3, lists×5, notes×3, subscribe-push) exigen
+>   `isAuthedFor(socket, payload.room)` antes de ejecutar; imposible olvidarlo al
+>   añadir uno nuevo. `update-room-style` lo comprueba a mano (clave `name`).
+> - **Rate limiting:** `lib/rateLimit.js` (ventana deslizante en memoria + barrido).
+>   `create-room`/`join-room` → 10 intentos por IP y minuto, mensaje en español al
+>   pasarse, `logger.warn`. IP de `socket.handshake.address` o `X-Forwarded-For` si
+>   `TRUST_PROXY=true` (`config/env.js`, documentado en `.env.example`).
+> - **Validación de payloads:** `sockets/validate.js` (`MAX` de longitudes,
+>   `str/optStr/isObject/isDateish`, `isValidEventInput`, `isValidPushSubscription`).
+>   Cada handler valida forma y longitudes en el borde → payload inválido = `return`
+>   sin persistir ni caer.
+> - Verificado: smoke (intruso sin join-room no escribe ni cambia estilo; título de
+>   500 chars y fechas inválidas no persisten; subscription malformada no confirma
+>   ni crashea; rate limit corta a los ~10 y otra IP sigue libre) + e2e headless.
 
 **Objetivo:** cerrar los agujeros de acceso. Es el bloque más importante del
 documento.

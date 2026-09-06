@@ -301,6 +301,7 @@ config/
   cors.js             ALLOWED_ORIGINS, isOriginAllowed, corsOrigin (firma (origin, cb))
 lib/
   logger.js           logger mínimo con niveles (error/warn/info/debug, umbral `LOG_LEVEL`, default info)
+  rateLimit.js        createRateLimiter({ windowMs, max }) — ventana deslizante en memoria
 db/
   connection.js       instancia better-sqlite3 (export `db`) + PRAGMA foreign_keys
   schema.js           createSchema() — CREATE TABLE IF NOT EXISTS
@@ -320,14 +321,25 @@ http/
 sockets/
   index.js            registerSocketHandlers(io) — io.on('connection') registra los 6 grupos
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
-  handler.js          safeOn(socket, event, errorEvent, errorPayload, fn) — try/catch + logger + emit de error al cliente
-  rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio (todos vía safeOn)
+  handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; safeAuthedOn además exige isAuthedFor(payload.room)
+  validate.js         MAX (longitudes), str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
+  rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 ```
 
-- **Errores de handler:** cada handler se registra con `safeOn`; una excepción se
-  loguea (`logger.error('socket:<event>', err)`) y emite su evento de error al
-  cliente (`event-error`/`list-error`/`note-error`/`room-error`/`access-denied`/`push-error`),
+- **Errores de handler:** cada handler se registra con `safeOn`/`safeAuthedOn`; una
+  excepción se loguea (`logger.error('socket:<event>', err)`) y emite su evento de
+  error al cliente (`event-error`/`list-error`/`note-error`/`room-error`/`access-denied`/`push-error`),
   nunca tumba el proceso. Nada de `console.*` en el server salvo el mensaje fatal de `env.js`.
+- **Autorización por sala:** los 12 handlers de escritura/lectura de datos van por
+  `safeAuthedOn` → un socket que no hizo `join-room`/`create-room` para esa sala no
+  puede actuar sobre ella (rechazo silencioso). `update-room-style` lo comprueba a
+  mano (su clave de sala es `name`). `unsubscribe-push` exige solo estar autenticado
+  en alguna sala (el `endpoint` es opaco).
+- **Rate limiting:** `create-room` y `join-room` limitan a 10 intentos por IP y
+  minuto (`sockets/rooms.js`). La IP viene de `socket.handshake.address`, o de
+  `X-Forwarded-For` solo si `TRUST_PROXY=true`.
+- **Validación de payloads:** cada handler valida forma y longitudes en el borde
+  (`sockets/validate.js`); un payload inválido → `return` sin persistir.
 
 ## Para deploy
 

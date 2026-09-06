@@ -4,18 +4,14 @@ import {
   resetReminderSent,
 } from '../db/index.js'
 import { generateRecurrenceInstances } from '../services/recurrence.js'
-import { isNonEmptyString, isAuthedFor, broadcast } from './helpers.js'
-import { safeOn } from './handler.js'
+import { broadcast } from './helpers.js'
+import { safeAuthedOn } from './handler.js'
+import { str, isValidEventInput, MAX } from './validate.js'
 
 export function registerEventHandlers(io, socket) {
-  safeOn(socket, 'create-event', 'event-error', { message: 'No se pudo crear el evento' }, ({ room, event }) => {
-    if (!isNonEmptyString(room)) return
-    if (!isAuthedFor(socket, room)) return
-    if (typeof event !== 'object' || event === null) return
-    if (!isNonEmptyString(event.start) || !isNonEmptyString(event.end)) return
-    const title = typeof event.title === 'string' ? event.title.trim() : ''
-    if (!title) return
-    const safeEvent = { ...event, title }
+  safeAuthedOn(socket, 'create-event', 'event-error', { message: 'No se pudo crear el evento' }, ({ room, event }) => {
+    if (!isValidEventInput(event)) return
+    const safeEvent = { ...event, title: event.title.trim() }
 
     if (safeEvent.recurrence_rule && safeEvent.recurrence_rule !== 'none') {
       const { instances } = generateRecurrenceInstances(safeEvent, safeEvent.recurrence_rule)
@@ -27,15 +23,9 @@ export function registerEventHandlers(io, socket) {
     }
   })
 
-  safeOn(socket, 'update-event', 'event-error', { message: 'No se pudo actualizar el evento' }, ({ room, event }) => {
-    if (!isNonEmptyString(room)) return
-    if (!isAuthedFor(socket, room)) return
-    if (typeof event !== 'object' || event === null) return
-    if (!isNonEmptyString(event.id)) return
-    if (!isNonEmptyString(event.start) || !isNonEmptyString(event.end)) return
-    const title = typeof event.title === 'string' ? event.title.trim() : ''
-    if (!title) return
-    const safeEvent = { ...event, title }
+  safeAuthedOn(socket, 'update-event', 'event-error', { message: 'No se pudo actualizar el evento' }, ({ room, event }) => {
+    if (!isValidEventInput(event) || !str(event.id, MAX.id)) return
+    const safeEvent = { ...event, title: event.title.trim() }
 
     const before = getEventById(safeEvent.id)
     const offsetChanged = before && (safeEvent.reminder_offset ?? null) !== before.reminder_offset
@@ -57,9 +47,8 @@ export function registerEventHandlers(io, socket) {
     }
   })
 
-  safeOn(socket, 'delete-event', 'event-error', { message: 'No se pudo eliminar el evento' }, ({ room, id }) => {
-    if (!isNonEmptyString(room) || !isNonEmptyString(id)) return
-    if (!isAuthedFor(socket, room)) return
+  safeAuthedOn(socket, 'delete-event', 'event-error', { message: 'No se pudo eliminar el evento' }, ({ room, id }) => {
+    if (!str(id, MAX.id)) return
     const ev = getEventById(id)
     if (ev?.recurrence_id) {
       deleteSeries(ev.recurrence_id)
