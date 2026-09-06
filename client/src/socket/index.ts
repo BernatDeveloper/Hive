@@ -1,4 +1,6 @@
 export { socket, rememberRoom, forgetRoom } from './client'
 export { SocketProvider } from './SocketProvider'
+export { ConnectionBanner } from './ConnectionBanner'
 export { useConnection } from './useConnection'
+export { awaitAuthResponse, CONNECTION_ERROR_MESSAGE } from './authFlow'
 export type { ConnectionStatus } from './connection-context'

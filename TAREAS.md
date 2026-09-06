@@ -154,7 +154,18 @@ duplicados al remontar), `Dashboard` reducido a composición.
 
 ---
 
-## Tarea C — Fix "no hay conexión"
+## Tarea C — Fix "no hay conexión" ✅ HECHA
+
+> Completada. `socket/authFlow.ts` → `awaitAuthResponse(listeners, onNetworkError)`:
+> registra los `once` + timeout de red (8s) + `connect_error`, con cleanup único;
+> `RoomEntry` (create y join, incl. la doble ronda de create) lo usa y aborta al
+> desmontar. `reconnection` explícita en `client.ts`. `ConnectionBanner` (montada en
+> `App`, dentro de `SocketProvider`) muestra "Sin conexión con el servidor.
+> Reintentando…" tras 3s de gracia — el efecto depende de un booleano `connected`,
+> no de `status`, para no reiniciar la gracia con la oscilación connecting↔disconnected.
+> Rehidratación en reconexión: ya venía de la Tarea B. Verificado e2e en Edge headless:
+> join con server caído falla con mensaje en ~3s + botón reactivado + banner; server
+> arriba → entra normal; caída con sala abierta → banner y resync automático al volver.
 
 **Problema:** con el servidor apagado, unirse a una sala se queda cargando para
 siempre. Causa: el flujo de auth hace `socket.once('access-granted' / 'access-denied')`

@@ -148,7 +148,8 @@ Detalle completo en `NOTIFICACIONES.md`.
 ```
 SocketProvider           # context de estado de conexión ('connecting'|'connected'|'disconnected')
 └── App
-    ├── RoomEntry        # home / create / join
+    ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
+    ├── RoomEntry        # home / create / join — auth con timeout de red de 8s (awaitAuthResponse)
     └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost
         ├── RoomSettings # modal de colores con presets claro/oscuro + preview (emits update-room-style)
         ├── Calendar     # recibe events + onCreate/Update/DeleteEvent por props (no toca socket)
@@ -224,7 +225,9 @@ features/
   cada feature incluye su hook de dominio: useEvents, useLists, useNotes, useRoomStyle,
   useRoomLost — poseen el estado, los socket.on con cleanup, y las acciones (socket.emit)
 socket/         client.ts (io singleton + rememberRoom/forgetRoom + re-join), SocketProvider
-                (context de estado de conexión), useConnection, index.ts (barrel)
+                (context de estado de conexión), useConnection, ConnectionBanner
+                (barra "Sin conexión" tras 3s), authFlow.ts (awaitAuthResponse:
+                timeout de red 8s en el login), index.ts (barrel)
 shared/         modal.css (base de modal, usado por EventModal y RoomSettings)
 hooks/          useIsMobile (breakpoint 640px)
 push.ts         helpers Web Push (subscribeToPush, getCurrentSubscription)

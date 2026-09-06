@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './auth.css'
-import { socket, rememberRoom, forgetRoom } from '../../socket'
+import { socket, rememberRoom, forgetRoom, awaitAuthResponse } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import HomeScreen from './HomeScreen'
 import CreateRoomForm from './CreateRoomForm'
@@ -13,38 +13,55 @@ interface Props {
 
 type Mode = 'home' | 'create' | 'join'
 
+interface AccessGranted {
+  room: Room
+  events: Event[]
+  lists: List[]
+  listItems: ListItem[]
+  notes: Note[]
+}
+
 export default function RoomEntry({ onEnter, notice }: Props) {
   const [mode, setMode] = useState<Mode>('home')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const cancelRef = useRef<(() => void) | null>(null)
+
+  // Al desmontar (o cambiar de pantalla) se abortan los listeners pendientes.
+  useEffect(() => () => cancelRef.current?.(), [])
 
   function goTo(m: Mode) {
+    cancelRef.current?.()
     setError('')
     setLoading(false)
     setMode(m)
+  }
+
+  function fail(msg: string) {
+    setLoading(false)
+    setError(msg)
+  }
+
+  function enter(name: string, password: string, payload: AccessGranted) {
+    rememberRoom(name, password)
+    onEnter(payload.room, payload.events, payload.lists, payload.listItems, payload.notes)
   }
 
   function handleCreate(name: string, password: string) {
     setLoading(true)
     setError('')
 
-    function onRoomCreated() {
-      socket.off('room-error', onRoomError)
-      socket.emit('join-room', { name, password })
-      socket.once('access-granted', ({ room, events, lists, listItems, notes }: { room: Room; events: Event[]; lists: List[]; listItems: ListItem[]; notes: Note[] }) => {
-        rememberRoom(name, password)
-        onEnter(room, events, lists, listItems, notes)
-      })
-    }
-
-    function onRoomError(msg: string) {
-      socket.off('room-created', onRoomCreated)
-      setLoading(false)
-      setError(msg)
-    }
-
-    socket.once('room-created', onRoomCreated)
-    socket.once('room-error', onRoomError)
+    cancelRef.current = awaitAuthResponse({
+      'room-created': () => {
+        // Segunda ronda: unirse a la sala recién creada (timeout propio).
+        cancelRef.current = awaitAuthResponse({
+          'access-granted': (payload) => enter(name, password, payload as AccessGranted),
+          'access-denied': (msg) => fail(msg as string),
+        }, fail)
+        socket.emit('join-room', { name, password })
+      },
+      'room-error': (msg) => fail(msg as string),
+    }, fail)
     socket.emit('create-room', { name, password })
   }
 
@@ -52,21 +69,10 @@ export default function RoomEntry({ onEnter, notice }: Props) {
     setLoading(true)
     setError('')
 
-    function onAccess({ room, events, lists, listItems, notes }: { room: Room; events: Event[]; lists: List[]; listItems: ListItem[]; notes: Note[] }) {
-      socket.off('access-denied', onDenied)
-      rememberRoom(name, password)
-      onEnter(room, events, lists, listItems, notes)
-    }
-
-    function onDenied(msg: string) {
-      socket.off('access-granted', onAccess)
-      forgetRoom()
-      setLoading(false)
-      setError(msg)
-    }
-
-    socket.once('access-granted', onAccess)
-    socket.once('access-denied', onDenied)
+    cancelRef.current = awaitAuthResponse({
+      'access-granted': (payload) => enter(name, password, payload as AccessGranted),
+      'access-denied': (msg) => { forgetRoom(); fail(msg as string) },
+    }, fail)
     socket.emit('join-room', { name, password })
   }
 

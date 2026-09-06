@@ -166,6 +166,7 @@ Definidas en `client/src/features/calendar/categories.ts` (`CATEGORIES`), cada u
 1. Pantalla de inicio → "Crear sala" o "Unirse a sala"
 2. Crear: nombre + contraseña + confirmación → `create-room` → auto-join → Dashboard
 3. Unirse: nombre + contraseña → `join-room` → Dashboard
+   - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
 4. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
 5. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
 6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro y preview en vivo (guardados en `room_style`)
@@ -176,7 +177,8 @@ Definidas en `client/src/features/calendar/categories.ts` (`CATEGORIES`), cada u
 ```
 SocketProvider           # context de estado de conexión
 └── App
-    ├── RoomEntry        # home/create/join screen
+    ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
+    ├── RoomEntry        # home/create/join — auth con timeout de red (awaitAuthResponse)
     └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost + navegación
         ├── RoomSettings # color modal con presets + preview (emits update-room-style, subscribe-push)
         ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props
@@ -258,10 +260,12 @@ features/
   settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
   notes/        Notes + notes.css, useNotes
 socket/
-  client.ts             el io() singleton + rememberRoom/forgetRoom + re-join al reconectar
+  client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
   SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
-  useConnection.ts      hook → estado de conexión (costura para la Tarea C)
-  connection-context.ts / index.ts (barrel)
+  useConnection.ts      hook → estado de conexión
+  ConnectionBanner.tsx  barra fija "Sin conexión con el servidor" tras 3s de gracia sin conexión (montada en App)
+  authFlow.ts           awaitAuthResponse(): listeners `once` + timeout de red (8s) + connect_error, con cleanup único
+  connection-context.ts / connection-banner.css / index.ts (barrel)
 shared/
   modal.css     estilos base del modal (usado por EventModal y RoomSettings)
 hooks/

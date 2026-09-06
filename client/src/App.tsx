@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import RoomEntry from './features/auth/RoomEntry'
 import Dashboard from './features/dashboard/Dashboard'
+import { ConnectionBanner } from './socket'
 import type { Room, Event, List, ListItem, Note } from './types'
 
 export default function App() {
@@ -18,31 +19,32 @@ export default function App() {
     setEntryNotice(message ?? null)
   }, [])
 
-  if (!room) {
-    return (
-      <RoomEntry
-        notice={entryNotice}
-        onEnter={(r, ev, lists, listItems, notes) => {
-          setEntryNotice(null)
-          setRoom(r)
-          setInitialEvents(ev)
-          setInitialLists(lists)
-          setInitialListItems(listItems)
-          setInitialNotes(notes)
-        }}
-      />
-    )
-  }
-
   return (
-    <Dashboard
-      room={room}
-      initialEvents={initialEvents}
-      initialLists={initialLists}
-      initialListItems={initialListItems}
-      initialNotes={initialNotes}
-      onLeave={handleLeave}
-      onUpdateRoom={setRoom}
-    />
+    <>
+      <ConnectionBanner />
+      {!room ? (
+        <RoomEntry
+          notice={entryNotice}
+          onEnter={(r, ev, lists, listItems, notes) => {
+            setEntryNotice(null)
+            setRoom(r)
+            setInitialEvents(ev)
+            setInitialLists(lists)
+            setInitialListItems(listItems)
+            setInitialNotes(notes)
+          }}
+        />
+      ) : (
+        <Dashboard
+          room={room}
+          initialEvents={initialEvents}
+          initialLists={initialLists}
+          initialListItems={initialListItems}
+          initialNotes={initialNotes}
+          onLeave={handleLeave}
+          onUpdateRoom={setRoom}
+        />
+      )}
+    </>
   )
 }
