@@ -1,6 +1,10 @@
-self.addEventListener('install', () => self.skipWaiting())
+// Actualización controlada: un SW nuevo se queda en "waiting" hasta que el
+// cliente manda 'skip-waiting' (tras confirmar el usuario). Ver client/src/pwa.ts.
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
 self.addEventListener('fetch', () => { return }) // passthrough, no interfiere con Socket.io
+self.addEventListener('message', (event) => {
+  if (event.data === 'skip-waiting') self.skipWaiting()
+})
 
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : {}

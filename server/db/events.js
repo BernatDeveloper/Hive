@@ -76,20 +76,51 @@ export function updateEvent(event) {
   return db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
 }
 
-export function updateSeries(event) {
-  const safe = {
+function seriesFields(event) {
+  return {
     ...event,
     category: sanitizeCategory(event.category),
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
   }
+}
+
+// scope 'all': aplica los metadatos a toda la serie.
+export function updateSeries(event) {
   db.prepare(`
     UPDATE event
     SET title = @title, description = @description, category = @category, color = @color,
         reminder_offset = @reminder_offset, updated_at = datetime('now')
     WHERE recurrence_id = @recurrence_id
-  `).run(safe)
+  `).run(seriesFields(event))
   return db.prepare('SELECT * FROM event WHERE recurrence_id = ?').all(event.recurrence_id)
+}
+
+// scope 'future': aplica los metadatos a las instancias desde `fromStart` (incl.)
+// y les asigna un recurrence_id nuevo (parte la serie). Devuelve las afectadas.
+export function updateSeriesFuture(event, recurrenceId, fromStart) {
+  const newRid = randomUUID()
+  db.prepare(`
+    UPDATE event
+    SET title = @title, description = @description, category = @category, color = @color,
+        reminder_offset = @reminder_offset, recurrence_id = @newRid, updated_at = datetime('now')
+    WHERE recurrence_id = @recurrence_id AND start >= @fromStart
+  `).run({ ...seriesFields(event), recurrence_id: recurrenceId, newRid, fromStart })
+  return db.prepare('SELECT * FROM event WHERE recurrence_id = ?').all(newRid)
+}
+
+// scope 'single': edita esa instancia y la desengancha de la serie.
+export function updateEventDetach(event) {
+  db.prepare(`
+    UPDATE event
+    SET title = @title, start = @start, end = @end,
+        description = @description, category = @category, color = @color,
+        reminder_offset = @reminder_offset,
+        recurrence_id = NULL, recurrence_rule = NULL,
+        updated_at = datetime('now')
+    WHERE id = @id
+  `).run(seriesFields(event))
+  return db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
 }
 
 export function deleteEvent(id) {
@@ -98,6 +129,14 @@ export function deleteEvent(id) {
 
 export function deleteSeries(recurrenceId) {
   db.prepare('DELETE FROM event WHERE recurrence_id = ?').run(recurrenceId)
+}
+
+// scope 'future' al borrar: quita las instancias desde `fromStart` (incl.).
+export function deleteSeriesFuture(recurrenceId, fromStart) {
+  const ids = db.prepare('SELECT id FROM event WHERE recurrence_id = ? AND start >= ?')
+    .all(recurrenceId, fromStart).map(r => r.id)
+  db.prepare('DELETE FROM event WHERE recurrence_id = ? AND start >= ?').run(recurrenceId, fromStart)
+  return ids
 }
 
 // --- Recordatorios (flag reminder_sent sobre la tabla event) ---

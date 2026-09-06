@@ -89,8 +89,9 @@ datos, `list_item(list_id)`, `event(reminder_sent,start)`).
 | `join-room` | `{ name, password }` | `access-granted` / `access-denied` |
 | `update-room-style` | `{ name, styles }` | `style-updated` (broadcast a la sala) |
 | `create-event` | `{ room, event }` | `event-created` (único) o `events-created` (array, si `recurrence_rule` genera serie) |
-| `update-event` | `{ room, event }` | `event-updated` (único) o `series-updated` `{ events }` (si hay `recurrence_id`) |
-| `delete-event` | `{ room, id }` | `event-deleted` (único) o `series-deleted` `{ recurrence_id }` |
+| `update-event` | `{ room, event, scope? }` | único → `event-updated`. Serie según `scope`: `single` → `event-updated` (desengancha); `future` → `series-updated` (recurrence_id nuevo); `all` (defecto) → `series-updated` |
+| `delete-event` | `{ room, id, scope? }` | único → `event-deleted`. Serie: `single` → `event-deleted`; `future` → `events-deleted {ids}`; `all` → `series-deleted` |
+| `get-presence` | `—` | `presence {count}` (+ broadcast al entrar/salir cualquiera) |
 | `create-note` | `{ room, title }` | `note-created` (broadcast) |
 | `update-note` | `{ room, note: {id,title,body,updated_at} }` | **ack** `{ status:'ok'\|'conflict'\|'not-found', note? }`; en `ok` además `note-updated` (broadcast). Concurrencia optimista por `updated_at` |
 | `delete-note` | `{ room, id }` | `note-deleted` (broadcast) |
@@ -126,8 +127,9 @@ golpe al crear, insertadas en batch con un `recurrence_id` compartido:
 | `monthly-last` | 36 meses (último día) |
 | `annual` | 10 años |
 
-- Editar o borrar **cualquier** instancia con `recurrence_id` afecta a **toda** la
-  serie (`updateSeries` / `deleteSeries`).
+- Al editar/borrar una instancia de serie, el modal ofrece **alcance**: `single`
+  (solo esa, la desengancha), `future` (esa y las siguientes, `recurrence_id`
+  nuevo) o `all` (defecto).
 - El selector de recurrencia **solo aparece al crear**, no al editar.
 - Al editar `start` o `reminder_offset` de un evento ya "avisado", el servidor
   hace `resetReminderSent` (en series, resetea todas las instancias).
@@ -158,7 +160,7 @@ SocketProvider           # context de estado de conexión ('connecting'|'connect
 └── App
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home / create / join — auth con timeout de red de 8s (awaitAuthResponse)
-    └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost
+    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence (indicador en el header)
         ├── RoomSettings # colores de sala + paleta de colores de evento (emits update-room-style)
         ├── Calendar     # recibe events + paletteColors + onCreate/Update/DeleteEvent por props (no toca socket)
         │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por color
@@ -234,9 +236,11 @@ features/
   cada feature incluye su hook de dominio: useEvents, useLists, useNotes, useRoomStyle,
   useRoomLost — poseen el estado, los socket.on con cleanup, y las acciones (socket.emit)
 socket/         client.ts (io singleton + rememberRoom/forgetRoom + re-join), SocketProvider
-                (context de estado de conexión), useConnection, ConnectionBanner
-                (barra "Sin conexión" tras 3s), authFlow.ts (awaitAuthResponse:
-                timeout de red 8s en el login), index.ts (barrel)
+                (context de estado de conexión), useConnection, usePresence
+                (nº de dispositivos en la sala), ConnectionBanner (barra "Sin
+                conexión" tras 3s), authFlow.ts (awaitAuthResponse: timeout de
+                red 8s en el login), index.ts (barrel)
+pwa.ts          useServiceWorkerUpdate(): registro del SW + prompt "versión nueva"
 shared/         modal.css (base de modal), color.ts (isColorDark / readableTextColor)
 hooks/          useIsMobile (breakpoint 640px)
 push.ts         helpers Web Push (subscribeToPush, getCurrentSubscription)
@@ -247,6 +251,7 @@ server/
   index.js            bootstrap (env → webpush → initDb → app/io → handlers → schedulers)
   config/             env.js (valida VAPID_*, exit 1 si falta), webpush.js, cors.js
   lib/                logger.js (niveles, LOG_LEVEL), rateLimit.js (ventana deslizante)
+  sockets/presence.js presence / get-presence (nº de sockets por sala)
   db/                 connection.js, schema.js, migrations.js, index.js (initDb + barrel),
                       rooms.js, events.js, lists.js, notes.js, push.js
   auth/password.js    hash + verify (scrypt async)

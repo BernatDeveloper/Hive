@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import '../../shared/modal.css'
-import type { Event, RecurrenceRule } from '../../types'
+import type { Event, RecurrenceRule, RecurrenceScope } from '../../types'
 import { RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './options'
 import { readableTextColor } from '../../shared/color'
 
@@ -10,10 +10,16 @@ interface Props {
   end?: string
   paletteColors: string[]
   primaryColor: string
-  onSave: (event: Partial<Event>) => void
-  onDelete: (id: string) => void
+  onSave: (event: Partial<Event>, scope?: RecurrenceScope) => void
+  onDelete: (id: string, scope?: RecurrenceScope) => void
   onClose: () => void
 }
+
+const SCOPE_OPTIONS: { value: RecurrenceScope; label: string }[] = [
+  { value: 'single', label: 'Solo este' },
+  { value: 'future', label: 'Este y los siguientes' },
+  { value: 'all', label: 'Toda la serie' },
+]
 
 function todayDateStr(): string {
   const d = new Date()
@@ -80,6 +86,7 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
   const [description, setDescription] = useState(event?.description ?? '')
   const [color, setColor] = useState<string | null>(event?.color ?? null)
   const [recurrence, setRecurrence] = useState<RecurrenceRule>('none')
+  const [scope, setScope] = useState<RecurrenceScope>('all')
   const [reminderOffset, setReminderOffset] = useState<number | null>(event?.reminder_offset ?? null)
 
   // Date state — shared by single and recurring modes
@@ -137,7 +144,7 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
         recurrence_rule: event?.recurrence_rule ?? null,
         recurrence_id:   event?.recurrence_id   ?? null,
         reminder_offset: reminderOffset,
-      })
+      }, scope)
       return
     }
     if (!startDate) return
@@ -215,9 +222,23 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
         {/* Date / recurrence section */}
         {isSeries ? (
           <div className="event-series-notice">
-            🔄 <strong>{event?.recurrence_rule ? RECURRENCE_LABELS[event.recurrence_rule] : 'Serie'}</strong>
-            <br />
-            <small>Guardar y Eliminar afectan a <strong>todos</strong> los eventos de la serie.</small>
+            <div className="event-series-head">
+              🔄 <strong>{event?.recurrence_rule ? RECURRENCE_LABELS[event.recurrence_rule] : 'Serie'}</strong>
+            </div>
+            <small>Aplicar cambios a:</small>
+            <div className="event-scope">
+              {SCOPE_OPTIONS.map(opt => (
+                <label key={opt.value} className={`event-scope-opt${scope === opt.value ? ' event-scope-opt--on' : ''}`}>
+                  <input
+                    type="radio"
+                    name="event-scope"
+                    checked={scope === opt.value}
+                    onChange={() => setScope(opt.value)}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
           </div>
         ) : (
           <>
@@ -350,8 +371,13 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
         <div className="modal-actions">
           <button className="btn-primary" onClick={save}>Guardar</button>
           {isEdit && (
-            <button className="btn-danger" onClick={() => onDelete(event!.id!)}>
-              {isSeries ? 'Eliminar serie' : 'Eliminar'}
+            <button
+              className="btn-danger"
+              onClick={() => onDelete(event!.id!, isSeries ? scope : undefined)}
+            >
+              {isSeries
+                ? (scope === 'single' ? 'Eliminar este' : scope === 'future' ? 'Eliminar estos' : 'Eliminar serie')
+                : 'Eliminar'}
             </button>
           )}
           <button className="btn-ghost" onClick={onClose}>Cancelar</button>

@@ -31,6 +31,27 @@
   gap: 0.5rem;
 }
 
+.dashboard-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 100px;
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: default;
+  user-select: none;
+}
+
+.dashboard-presence-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success, #34C759);
+}
+
 .dashboard-room-name {
   font-weight: 600;
   font-size: 0.95rem;

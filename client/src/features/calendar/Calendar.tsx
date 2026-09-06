@@ -5,7 +5,7 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import esLocale from '@fullcalendar/core/locales/es'
-import type { Event } from '../../types'
+import type { Event, RecurrenceScope } from '../../types'
 import EventModal from './EventModal'
 import EventsPanel from './EventsPanel'
 import { readableTextColor } from '../../shared/color'
@@ -16,8 +16,8 @@ interface Props {
   primaryColor?: string
   paletteColors: string[]
   onCreateEvent: (data: Partial<Event>) => void
-  onUpdateEvent: (data: Partial<Event>) => void
-  onDeleteEvent: (id: string) => void
+  onUpdateEvent: (data: Partial<Event>, scope?: RecurrenceScope) => void
+  onDeleteEvent: (id: string, scope?: RecurrenceScope) => void
 }
 
 interface ModalState {
@@ -41,17 +41,17 @@ export default function Calendar({ events, primaryColor = '#0071E3', paletteColo
     if (event) setModal({ open: true, event })
   }
 
-  function save(data: Partial<Event>) {
+  function save(data: Partial<Event>, scope?: RecurrenceScope) {
     if (data.id) {
-      onUpdateEvent(data)
+      onUpdateEvent(data, scope)
     } else {
       onCreateEvent(data)
     }
     setModal({ open: false })
   }
 
-  function remove(id: string) {
-    onDeleteEvent(id)
+  function remove(id: string, scope?: RecurrenceScope) {
+    onDeleteEvent(id, scope)
     setModal({ open: false })
   }
 

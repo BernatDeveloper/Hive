@@ -3,6 +3,7 @@ import { registerEventHandlers } from './events.js'
 import { registerListHandlers } from './lists.js'
 import { registerNoteHandlers } from './notes.js'
 import { registerPushHandlers } from './push.js'
+import { registerPresenceHandlers } from './presence.js'
 
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -11,5 +12,6 @@ export function registerSocketHandlers(io) {
     registerListHandlers(io, socket)
     registerNoteHandlers(io, socket)
     registerPushHandlers(io, socket)
+    registerPresenceHandlers(io, socket)
   })
 }

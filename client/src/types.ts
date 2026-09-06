@@ -1,5 +1,8 @@
 export type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-first' | 'monthly-last' | 'annual'
 
+// Alcance de una edición/borrado sobre una instancia de serie recurrente.
+export type RecurrenceScope = 'single' | 'future' | 'all'
+
 export interface Event {
   id: string
   room: string

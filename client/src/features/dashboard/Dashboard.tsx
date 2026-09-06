@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import './dashboard.css'
-import { forgetRoom } from '../../socket'
+import { forgetRoom, usePresence } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import ModuleGrid from './ModuleGrid'
 import type { ModuleId } from './ModuleGrid'
@@ -43,6 +43,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const [showSettings, setShowSettings] = useState(false)
 
   const { colors, cssVars, roomWithColors, eventColors } = useRoomStyle(room, onUpdateRoom)
+  const presence = usePresence()
   const cal = useEvents(room.name, initialEvents)
   const lists = useLists(room.name, initialLists, initialListItems)
   const notes = useNotes(room.name, initialNotes)
@@ -70,6 +71,12 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         </div>
 
         <div className="dashboard-header-right">
+          {presence > 1 && (
+            <span className="dashboard-presence" title={`${presence} dispositivos conectados`}>
+              <span className="dashboard-presence-dot" />
+              {presence}
+            </span>
+          )}
           <button className="btn-ghost btn-icon" onClick={() => setShowSettings(true)} aria-label="Ajustes">
             <IconSettings />
           </button>

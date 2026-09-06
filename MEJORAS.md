@@ -251,7 +251,29 @@ el mismo criterio.
 
 ---
 
-## FASE 5 — Experiencia de producto
+## FASE 5 — Experiencia de producto — 3/4 hechas (undo pendiente)
+
+> - **Series "este y los siguientes":** `update-event`/`delete-event` llevan `scope`
+>   (`single`/`future`/`all`, defecto `all` = compat). `single` desengancha la
+>   instancia (`recurrence_id`/`recurrence_rule` → NULL); `future` reasigna un
+>   `recurrence_id` nuevo a las instancias desde el pivote (`db/events.js`
+>   `updateSeriesFuture`/`deleteSeriesFuture`/`updateEventDetach`). `EventModal`:
+>   radio de alcance en el branch de serie. Nuevo evento `events-deleted { ids }`.
+>   Tests: `test/series.test.js` (7).
+> - **Prompt de actualización del SW:** `public/sw.js` deja de hacer `skipWaiting()`
+>   automático; escucha `message` `'skip-waiting'`. `src/pwa.ts` `useServiceWorkerUpdate()`
+>   detecta el worker en espera → banner "Hay una versión nueva — Recargar" en `App`
+>   → `postMessage` + reload en `controllerchange`. Verificado e2e.
+> - **Presencia:** `sockets/presence.js` — el servidor cuenta sockets por sala
+>   (`io.sockets.adapter.rooms`) y difunde `presence { count }` al entrar/salir;
+>   `get-presence` para pedirlo bajo demanda (el broadcast tras `access-granted`
+>   llega antes de montar el listener). `usePresence()` + indicador en el header del
+>   Dashboard (solo si > 1). Tests: `test/presence.test.js`.
+> - **Undo para borrados:** pendiente (follow-up — es el más transversal, toca
+>   events/lists/notes).
+>
+> `pnpm test` → 31. e2e headless: 2 pestañas con scopes de serie + presencia 1↔2;
+> prompt de SW con despliegue simulado.
 
 **Objetivo:** mejoras visibles de uso. Priorizar dentro de la fase según producto.
 

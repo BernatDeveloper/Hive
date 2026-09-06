@@ -4,11 +4,8 @@ import './index.css'
 import App from './App.tsx'
 import { SocketProvider } from './socket'
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(console.error)
-  })
-}
+// El registro del service worker vive en useServiceWorkerUpdate() (src/pwa.ts),
+// montado en <App>, para poder ofrecer el prompt de actualización.
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -7,6 +7,7 @@ import { logger } from '../lib/logger.js'
 import { createRateLimiter } from '../lib/rateLimit.js'
 import { isAuthedFor, markAuthed, broadcast } from './helpers.js'
 import { safeOn } from './handler.js'
+import { emitPresence } from './presence.js'
 import { MAX, str, isObject } from './validate.js'
 
 // Fuerza bruta: máx. 10 intentos de auth por IP y minuto.
@@ -56,6 +57,7 @@ export function registerRoomHandlers(io, socket) {
       listItems: getListItems(name),
       notes: getNotes(name),
     })
+    emitPresence(io, name) // el socket ya está en la room → cuenta correcta
   })
 
   // La clave de sala aquí es `name`, no `room` — no encaja en safeAuthedOn.

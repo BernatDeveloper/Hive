@@ -126,8 +126,8 @@ Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficher
 | `join-room` | `{ name, password }` | `access-granted` / `access-denied` |
 | `update-room-style` | `{ name, styles }` | `style-updated` (room broadcast) |
 | `create-event` | `{ room, event }` | `event-created` si es evento único; `events-created` (array) si `event.recurrence_rule` genera una serie |
-| `update-event` | `{ room, event }` | `event-updated` si es evento único; `series-updated` (`{ events }`) si `event.recurrence_id` está presente — afecta a toda la serie |
-| `delete-event` | `{ room, id }` | `event-deleted` si es evento único; `series-deleted` (`{ recurrence_id }`) si pertenece a una serie |
+| `update-event` | `{ room, event, scope? }` | evento único → `event-updated`. Instancia de serie según `scope`: `single` → `event-updated` (desengancha la instancia); `future` → `series-updated` (`{ events }`, subconjunto con `recurrence_id` nuevo); `all` (defecto) → `series-updated` |
+| `delete-event` | `{ room, id, scope? }` | evento único → `event-deleted`. Instancia de serie: `single` → `event-deleted`; `future` → `events-deleted` (`{ ids }`); `all` (defecto) → `series-deleted` (`{ recurrence_id }`) |
 | `create-note` | `{ room, title }` | `note-created` (room broadcast) |
 | `update-note` | `{ room, note: { id, title, body, updated_at } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
 | `delete-note` | `{ room, id }` | `note-deleted` (room broadcast) |
@@ -136,6 +136,11 @@ Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficher
 | `create-list-item` | `{ room, listId, text }` | `list-item-created` (room broadcast) |
 | `toggle-list-item` | `{ room, id, checked }` | `list-item-updated` (room broadcast) |
 | `delete-list-item` | `{ room, id }` | `list-item-deleted` (room broadcast) |
+| `get-presence` | `—` | `presence` (`{ count }`) al emisor |
+| `subscribe-push` / `unsubscribe-push` | `{ room, subscription }` / `{ endpoint }` | `push-subscribed` / `push-unsubscribed` / `push-error` |
+
+Además, el servidor difunde `presence` (`{ count }`) a la sala al entrar/salir
+cualquier socket (`sockets/presence.js`).
 
 ### Payload `access-granted`
 ```typescript
@@ -163,7 +168,7 @@ Al crear un evento con `recurrence_rule !== 'none'`, el servidor (`generateRecur
 | `monthly-last` | 36 meses, último día de cada mes |
 | `annual` | 10 años |
 
-- Editar o eliminar cualquier instancia de una serie (evento con `recurrence_id`) afecta a **todas** las instancias (`updateSeries` / `deleteSeries`); las instancias comparten `color`
+- Al editar/borrar una instancia de serie, el `EventModal` ofrece **alcance**: `single` (solo esa — la desengancha: `recurrence_id`/`recurrence_rule` → NULL), `future` (esa y las siguientes por `start` — reciben un `recurrence_id` nuevo, parte la serie) o `all` (defecto — `updateSeries`/`deleteSeries` por `recurrence_id`). Las instancias comparten `color`.
 - El selector de recurrencia solo aparece al crear (no al editar un evento ya existente ni una serie)
 
 ## Colores de evento
@@ -184,15 +189,17 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 5. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
 6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo y **paleta de colores de evento** (guardados en `room_style`)
 7. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
+8. Presencia: el header del Dashboard muestra un punto + número si hay más de un dispositivo conectado a la sala
+9. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
 
 ## Estructura de componentes
 
 ```
 SocketProvider           # context de estado de conexión
-└── App
+└── App                  # + useServiceWorkerUpdate() → banner "versión nueva"
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home/create/join — auth con timeout de red (awaitAuthResponse)
-    └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost + navegación
+    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con indicador de presencia)
         ├── RoomSettings # color modal con presets + preview (emits update-room-style, subscribe-push)
         ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props
         │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por color
@@ -293,9 +300,12 @@ socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
   SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
   useConnection.ts      hook → estado de conexión
+  usePresence.ts        hook → nº de dispositivos en la sala (>= 1); pide `get-presence` al montar
   ConnectionBanner.tsx  barra fija "Sin conexión con el servidor" tras 3s de gracia sin conexión (montada en App)
   authFlow.ts           awaitAuthResponse(): listeners `once` + timeout de red (8s) + connect_error, con cleanup único
   connection-context.ts / connection-banner.css / index.ts (barrel)
+pwa.ts          useServiceWorkerUpdate(): registra el SW, detecta versión en espera, apply() = skipWaiting + reload
+app.css         estilos del banner de actualización
 shared/
   modal.css     estilos base del modal (usado por EventModal y RoomSettings)
   color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar, EventModal)
@@ -346,12 +356,15 @@ sockets/
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
   handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; reenvían el ack de socket.io al handler; safeAuthedOn además exige isAuthedFor(payload.room)
   validate.js         MAX (longitudes), str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
+  presence.js         `presence`/`get-presence` (nº de sockets por sala vía io.sockets.adapter.rooms) + handler `disconnecting`
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 test/
   setup.js            --import de `pnpm test`: env de prueba + DB_PATH temporal por proceso (se borra al salir)
   helpers.js          startTestServer() (compone app/io/handlers sin index.js ni webpush), connect(), once()
   handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
+  series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
+  presence.test.js    presence sube al entrar, baja al salir, get-presence bajo demanda
 services/recurrence.test.js   unit: generateRecurrenceInstances (todas las reglas/horizontes, propagación, spans, hora)
 ```
 
