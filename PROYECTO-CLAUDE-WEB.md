@@ -34,7 +34,8 @@ protegidas con contraseña** y comparten tres módulos: **Calendario**, **Listas
 | `client/` | React 19 + Vite + TypeScript + FullCalendar v6 + Socket.io-client + PWA (service worker) |
 | `server/` | Node.js v22 + Express v5 + Socket.io v4 + better-sqlite3 + web-push |
 | Puertos | server `3001`, client dev `5173`, client preview `4173` |
-| Comandos | `cd server && node index.js` · `cd client && pnpm dev` |
+| Comandos | `cd server && node index.js` · `cd client && pnpm dev` · `cd server && pnpm test` |
+| Tests | `node:test` (Node 22) en `server/`: `services/recurrence.test.js` (unit) + `test/handlers.test.js` (integración socket) |
 
 ## Arquitectura general
 

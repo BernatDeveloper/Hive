@@ -16,6 +16,9 @@ cd server && node index.js
 
 # Cliente (puerto 5173)
 cd client && pnpm dev
+
+# Tests del servidor (node:test, sin dependencias de test extra salvo socket.io-client)
+cd server && pnpm test
 ```
 
 ### Nota Windows: build nativo de better-sqlite3
@@ -328,7 +331,16 @@ sockets/
   handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; safeAuthedOn además exige isAuthedFor(payload.room)
   validate.js         MAX (longitudes), str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
+test/
+  setup.js            --import de `pnpm test`: env de prueba + DB_PATH temporal por proceso (se borra al salir)
+  helpers.js          startTestServer() (compone app/io/handlers sin index.js ni webpush), connect(), once()
+  handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
+services/recurrence.test.js   unit: generateRecurrenceInstances (todas las reglas/horizontes, propagación, spans, hora)
 ```
+
+- **Tests** (`node:test`, Node 22): `cd server && pnpm test`. `pnpm-workspace.yaml`
+  lleva `verifyDepsBeforeRun: false` porque el chequeo previo de pnpm 11 en Windows
+  falla con `ERR_PNPM_IGNORED_BUILDS` de better-sqlite3 aunque el `.node` ya exista.
 
 - **Errores de handler:** cada handler se registra con `safeOn`/`safeAuthedOn`; una
   excepción se loguea (`logger.error('socket:<event>', err)`) y emite su evento de

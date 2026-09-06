@@ -1,4 +1,6 @@
-allowBuilds:
-  better-sqlite3: set this to true or false
 onlyBuiltDependencies:
   - better-sqlite3
+# pnpm 11 en Windows a veces reporta ERR_PNPM_IGNORED_BUILDS para better-sqlite3
+# aunque el .node ya esté compilado (ver CLAUDE.md), y ese chequeo previo bloquea
+# `pnpm test`. Lo desactivamos: las deps se instalan con `pnpm install` normal.
+verifyDepsBeforeRun: false

@@ -168,7 +168,25 @@ suscripciones muertas; las consultas frecuentes usan índice.
 
 ---
 
-## FASE 3 — Red de seguridad (tests)
+## FASE 3 — Red de seguridad (tests) ✅ HECHA
+
+> Completada. Runner: `node:test` (Node 22, cero deps de test salvo
+> `socket.io-client` como devDependency). `cd server && pnpm test` → **18 tests**.
+> - `services/recurrence.test.js` (11): cada regla genera su horizonte
+>   (365/104/36/36/36/10), regla desconocida → 0, `recurrence_id` compartido + `id`
+>   únicos, propagación de title/description/color/reminder_offset, fechas de
+>   `daily`/`weekly`/`monthly-first`/`monthly-last`/`annual`, span multi-día, evento
+>   con hora.
+> - `test/handlers.test.js` (7): create-room (+ duplicado), join-room
+>   correcto/incorrecto (+ forma del `access-granted`), autorización por sala (socket
+>   sin join no escribe), CRUD de evento, serie recurrente (104 + `recurrence_id`
+>   compartido + `series-updated`), payload inválido no persiste ni tumba, rate limit
+>   corta a los ~10.
+> - `test/helpers.js` compone app/io/handlers en puerto efímero **sin** `index.js`
+>   (así no toca webpush ni schedulers). `test/setup.js` (`--import`) da env de
+>   prueba y una DB temporal por proceso que se borra al salir.
+> - `pnpm-workspace.yaml`: `verifyDepsBeforeRun: false` para sortear el
+>   `ERR_PNPM_IGNORED_BUILDS` de better-sqlite3 en Windows.
 
 **Objetivo:** cobertura de lo más frágil **antes** de tocar la lógica de datos de las
 fases 4 y 5.
