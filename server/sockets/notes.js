@@ -11,16 +11,25 @@ export function registerNoteHandlers(io, socket) {
     broadcast(io, room, 'note-created', note)
   })
 
-  safeAuthedOn(socket, 'update-note', 'note-error', { message: 'No se pudo actualizar la nota' }, ({ room, note }) => {
-    if (!isObject(note) || !str(note.id, MAX.id)) return
+  // Devuelve el resultado por acknowledgement (el que guarda necesita saber si
+  // hubo conflicto de versión). En 'ok' además difunde note-updated a la sala.
+  safeAuthedOn(socket, 'update-note', 'note-error', { message: 'No se pudo actualizar la nota' }, ({ room, note }, ack) => {
+    if (!isObject(note) || !str(note.id, MAX.id)) return ack?.({ status: 'invalid' })
     const safeNote = {
       id: note.id,
       title: typeof note.title === 'string' ? note.title.slice(0, MAX.noteTitle) : '',
       body: typeof note.body === 'string' ? note.body.slice(0, MAX.noteBody) : '',
+      expected_updated_at: typeof note.updated_at === 'string' ? note.updated_at : null,
     }
-    const updated = updateNote(safeNote)
-    if (!updated) return // id inexistente: nada que difundir
-    broadcast(io, room, 'note-updated', updated)
+    const result = updateNote(safeNote)
+    if (result.status === 'ok') {
+      broadcast(io, room, 'note-updated', result.note)
+      ack?.({ status: 'ok', note: result.note })
+    } else if (result.status === 'conflict') {
+      ack?.({ status: 'conflict', note: result.current })
+    } else {
+      ack?.({ status: 'not-found' })
+    }
   })
 
   safeAuthedOn(socket, 'delete-note', 'note-error', { message: 'No se pudo eliminar la nota' }, ({ room, id }) => {

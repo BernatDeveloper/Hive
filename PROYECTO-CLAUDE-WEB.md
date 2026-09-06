@@ -92,7 +92,7 @@ datos, `list_item(list_id)`, `event(reminder_sent,start)`).
 | `update-event` | `{ room, event }` | `event-updated` (único) o `series-updated` `{ events }` (si hay `recurrence_id`) |
 | `delete-event` | `{ room, id }` | `event-deleted` (único) o `series-deleted` `{ recurrence_id }` |
 | `create-note` | `{ room, title }` | `note-created` (broadcast) |
-| `update-note` | `{ room, note }` | `note-updated` (broadcast) |
+| `update-note` | `{ room, note: {id,title,body,updated_at} }` | **ack** `{ status:'ok'\|'conflict'\|'not-found', note? }`; en `ok` además `note-updated` (broadcast). Concurrencia optimista por `updated_at` |
 | `delete-note` | `{ room, id }` | `note-deleted` (broadcast) |
 | `create-list` | `{ room, title }` | `list-created` (broadcast) |
 | `delete-list` | `{ room, id }` | `list-deleted` (broadcast) |
@@ -164,7 +164,7 @@ SocketProvider           # context de estado de conexión ('connecting'|'connect
         │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por color
         │   └── EventModal   # crear/editar/borrar evento — color de la paleta, recurrencia, hora opcional, recordatorio
         ├── Lists        # datos + callbacks por props
-        └── Notes        # editor con auto-save 600ms — datos + callbacks por props
+        └── Notes        # editor con auto-save 600ms + concurrencia optimista (banner de conflicto) — datos + callbacks por props
 ```
 
 Cada hook de dominio (`useEvents`, `useLists`, `useNotes`, `useRoomStyle`) posee su

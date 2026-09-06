@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { socket } from '../../socket'
 import type { Note } from '../../types'
 
+export interface UpdateNoteResult {
+  status: 'ok' | 'conflict' | 'not-found' | 'invalid' | 'timeout'
+  note?: Note
+}
+
 // Estado del módulo de notas. Las notas nuevas se añaden al principio.
 // Refresca la lista entera desde `access-granted` (reconexión).
 export function useNotes(room: string, initial: Note[]) {
@@ -28,8 +33,16 @@ export function useNotes(room: string, initial: Note[]) {
   return {
     notes,
     createNote: () => socket.emit('create-note', { room, title: 'Sin título' }),
-    updateNote: (id: string, title: string, body: string) =>
-      socket.emit('update-note', { room, note: { id, title, body } }),
+    // Guarda con control de versión optimista: el servidor responde por ack
+    // si la versión base (`updatedAt`) sigue vigente o hay conflicto.
+    updateNote: (id: string, title: string, body: string, updatedAt: string): Promise<UpdateNoteResult> =>
+      new Promise(resolve => {
+        socket.timeout(5000).emit(
+          'update-note',
+          { room, note: { id, title, body, updated_at: updatedAt } },
+          (err: unknown, res: UpdateNoteResult) => resolve(err ? { status: 'timeout' } : res),
+        )
+      }),
     deleteNote: (id: string) => socket.emit('delete-note', { room, id }),
   }
 }

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import './notes.css'
 import type { Note } from '../../types'
+import type { UpdateNoteResult } from './useNotes'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Props {
   notes: Note[]
   onCreateNote: () => void
-  onUpdateNote: (id: string, title: string, body: string) => void
+  onUpdateNote: (id: string, title: string, body: string, updatedAt: string) => Promise<UpdateNoteResult>
   onDeleteNote: (id: string) => void
 }
 
@@ -46,9 +47,14 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
   const [localTitle, setLocalTitle] = useState('')
   const [localBody, setLocalBody] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [conflict, setConflict] = useState<Note | null>(null)
   const [mobilePage, setMobilePage] = useState<'notes' | 'detail'>('notes')
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevNotesRef = useRef<Note[]>(notes)
+  // Versión (updated_at) + contenido sobre los que se basan las ediciones
+  // locales actuales. Avanza al guardar con éxito o al adoptar cambios ajenos;
+  // NO avanza con los `note-updated` de otras personas si tenemos cambios sin guardar.
+  const baseRef = useRef<{ updated_at: string; title: string; body: string }>({ updated_at: '', title: '', body: '' })
   const isMobile = useIsMobile()
 
   // Auto-select newly created note
@@ -61,16 +67,40 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
     prevNotesRef.current = notes
   }, [notes, isMobile])
 
-  // Load note content when selection changes
+  // Cargar contenido al cambiar de nota seleccionada.
   useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     if (!selectedId) return
     const note = notes.find(n => n.id === selectedId)
     if (note) {
       setLocalTitle(note.title)
       setLocalBody(note.body)
       setSaveStatus('idle')
+      baseRef.current = { updated_at: note.updated_at, title: note.title, body: note.body }
     }
   }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedNote = notes.find(n => n.id === selectedId) ?? null
+
+  // Cambio remoto de la nota abierta: si no tenemos ediciones sin guardar,
+  // adoptamos la versión del servidor (así un "lector" ve las ediciones ajenas
+  // en vivo). Si sí las tenemos, no se toca — el próximo guardado dará conflicto.
+  useEffect(() => {
+    if (!selectedNote || selectedNote.updated_at === baseRef.current.updated_at) return
+    const dirty = localTitle !== baseRef.current.title || localBody !== baseRef.current.body
+    if (!dirty) {
+      setLocalTitle(selectedNote.title)
+      setLocalBody(selectedNote.body)
+      setSaveStatus('idle')
+      baseRef.current = { updated_at: selectedNote.updated_at, title: selectedNote.title, body: selectedNote.body }
+    }
+  }, [selectedNote?.updated_at]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function selectNote(id: string) {
+    setSelectedId(id)
+    setConflict(null)
+    if (isMobile) setMobilePage('detail')
+  }
 
   // Clear pending timer on unmount
   useEffect(() => () => {
@@ -78,13 +108,35 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
   }, [])
 
   function scheduleSave(title: string, body: string) {
-    if (!selectedId) return
+    if (!selectedId || conflict) return
     setSaveStatus('saving')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      onUpdateNote(selectedId, title, body)
-      setSaveStatus('saved')
+    const id = selectedId
+    saveTimerRef.current = setTimeout(async () => {
+      const res = await onUpdateNote(id, title, body, baseRef.current.updated_at)
+      if (res.status === 'ok' && res.note) {
+        if (id === selectedId) {
+          baseRef.current = { updated_at: res.note.updated_at, title, body }
+          setSaveStatus('saved')
+        }
+      } else if (res.status === 'conflict' && res.note) {
+        if (id === selectedId) {
+          setConflict(res.note)
+          setSaveStatus('idle')
+        }
+      } else {
+        if (id === selectedId) setSaveStatus('idle')
+      }
     }, 600)
+  }
+
+  function resolveConflict() {
+    if (!conflict) return
+    setLocalTitle(conflict.title)
+    setLocalBody(conflict.body)
+    baseRef.current = { updated_at: conflict.updated_at, title: conflict.title, body: conflict.body }
+    setConflict(null)
+    setSaveStatus('idle')
   }
 
   function handleTitleChange(val: string) {
@@ -109,7 +161,7 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
     }
   }
 
-  const selectedNote = notes.find(n => n.id === selectedId) ?? null
+  const showConflict = conflict !== null && conflict.id === selectedId
 
   // ─── Sidebar ────────────────────────────────────────────
   const sidebar = (
@@ -132,10 +184,7 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
           >
             <button
               className="notes-sidebar-item-btn"
-              onClick={() => {
-                setSelectedId(note.id)
-                if (isMobile) setMobilePage('detail')
-              }}
+              onClick={() => selectNote(note.id)}
             >
               <span className="notes-sidebar-item-title">{note.title || 'Sin título'}</span>
               {note.body && (
@@ -197,6 +246,15 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
               <IconTrash />
             </button>
           </div>
+
+          {showConflict && (
+            <div className="notes-conflict" role="alert">
+              <span>Otra persona editó esta nota. Tus cambios sin guardar no se han enviado.</span>
+              <button className="btn-secondary" onClick={resolveConflict}>
+                Cargar la versión actual
+              </button>
+            </div>
+          )}
 
           <textarea
             className="notes-body"

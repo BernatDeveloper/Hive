@@ -48,3 +48,11 @@ export function once(socket, event, ms = 3000) {
 export function onceAny(socket, events, ms = 3000) {
   return Promise.race(events.map(ev => once(socket, ev, ms).then(data => ({ event: ev, data }))))
 }
+
+// Emite con acknowledgement y devuelve la respuesta del servidor.
+export function emitAck(socket, event, payload, ms = 3000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`timeout ack de "${event}"`)), ms)
+    socket.emit(event, payload, res => { clearTimeout(t); resolve(res) })
+  })
+}

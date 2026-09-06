@@ -6,9 +6,11 @@ import { isNonEmptyString, isAuthedFor } from './helpers.js'
 // al cliente con `errorEvent` (payload `errorPayload`, mensaje en español) en vez
 // de propagar la excepción. El payload siempre llega al handler como objeto.
 export function safeOn(socket, event, errorEvent, errorPayload, handler) {
-  socket.on(event, async (payload = {}) => {
+  socket.on(event, async (payload = {}, ack) => {
     try {
-      await handler(payload)
+      // `ack` (callback de acknowledgement de socket.io) es undefined si el
+      // cliente no lo pasó — los handlers que no lo usan lo ignoran.
+      await handler(payload, typeof ack === 'function' ? ack : undefined)
     } catch (err) {
       logger.error(`socket:${event}`, err)
       socket.emit(errorEvent, errorPayload)
@@ -21,8 +23,8 @@ export function safeOn(socket, event, errorEvent, errorPayload, handler) {
 // leer ni escribir datos de una sala solo por conocer su nombre. Rechazo
 // silencioso: no dar pistas a un cliente que no debería estar aquí.
 export function safeAuthedOn(socket, event, errorEvent, errorPayload, handler) {
-  safeOn(socket, event, errorEvent, errorPayload, (payload) => {
+  safeOn(socket, event, errorEvent, errorPayload, (payload, ack) => {
     if (!isNonEmptyString(payload.room) || !isAuthedFor(socket, payload.room)) return
-    return handler(payload) // devuelve la promesa para que safeOn la espere
+    return handler(payload, ack) // devuelve la promesa para que safeOn la espere
   })
 }

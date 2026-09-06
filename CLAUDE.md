@@ -129,7 +129,7 @@ Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficher
 | `update-event` | `{ room, event }` | `event-updated` si es evento único; `series-updated` (`{ events }`) si `event.recurrence_id` está presente — afecta a toda la serie |
 | `delete-event` | `{ room, id }` | `event-deleted` si es evento único; `series-deleted` (`{ recurrence_id }`) si pertenece a una serie |
 | `create-note` | `{ room, title }` | `note-created` (room broadcast) |
-| `update-note` | `{ room, note }` | `note-updated` (room broadcast) |
+| `update-note` | `{ room, note: { id, title, body, updated_at } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
 | `delete-note` | `{ room, id }` | `note-deleted` (room broadcast) |
 | `create-list` | `{ room, title }` | `list-created` (room broadcast) |
 | `delete-list` | `{ room, id }` | `list-deleted` (room broadcast) |
@@ -203,6 +203,22 @@ SocketProvider           # context de estado de conexión
 
 - `Calendar`, `Lists` y `Notes` son responsive: por debajo del breakpoint móvil (`useIsMobile`, 640px) muestran un solo panel a la vez (toggle sidebar ↔ detalle/calendario) en vez del layout de dos columnas de escritorio
 
+## Concurrencia en notas (auto-save)
+
+`update-note` usa **concurrencia optimista** por `updated_at`. El editor guarda con
+el `updated_at` de la versión sobre la que empezó a escribir (`baseRef` en `Notes.tsx`);
+el servidor (`db/notes.js`) responde por ack:
+- `ok` → aplica y difunde `note-updated`; el editor avanza su versión base
+- `conflict` → **no** aplica; devuelve la versión actual y el editor muestra un
+  banner "Otra persona editó esta nota" con "Cargar la versión actual"
+- Un editor que **no** tiene cambios sin guardar adopta en vivo las ediciones
+  ajenas (`note-updated`) — funciona como lector en tiempo real
+- `updated_at` de notas se fuerza estrictamente creciente (`nextTimestamp`) para
+  que dos guardados en el mismo ms no compartan testigo de versión
+
+Los eventos no llevan este control: se editan con guardado explícito (modal), no
+auto-save, así que la superficie de colisión es mínima (edición de series → Fase 5).
+
 ## Sistema de colores por sala
 
 El Dashboard calcula CSS custom properties inline a partir de los colores de la sala, derivando extras según si el fondo es oscuro o claro (`isColorDark`):
@@ -272,7 +288,7 @@ features/
   calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents
   lists/        Lists + lists.css, useLists
   settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
-  notes/        Notes + notes.css, useNotes
+  notes/        Notes + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note)
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
   SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
@@ -328,13 +344,14 @@ http/
 sockets/
   index.js            registerSocketHandlers(io) — io.on('connection') registra los 6 grupos
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
-  handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; safeAuthedOn además exige isAuthedFor(payload.room)
+  handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; reenvían el ack de socket.io al handler; safeAuthedOn además exige isAuthedFor(payload.room)
   validate.js         MAX (longitudes), str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 test/
   setup.js            --import de `pnpm test`: env de prueba + DB_PATH temporal por proceso (se borra al salir)
   helpers.js          startTestServer() (compone app/io/handlers sin index.js ni webpush), connect(), once()
   handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
+  notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
 services/recurrence.test.js   unit: generateRecurrenceInstances (todas las reglas/horizontes, propagación, spans, hora)
 ```
 

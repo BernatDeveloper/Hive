@@ -206,7 +206,24 @@ riesgo de romper algo en silencio; tener tests antes las hace seguras.
 
 ---
 
-## FASE 4 — Integridad colaborativa
+## FASE 4 — Integridad colaborativa ✅ HECHA
+
+> Completada al **nivel pragmático** (concurrencia optimista por `updated_at`).
+> - `db/notes.js` `updateNote`: si `expected_updated_at` no coincide con el actual →
+>   `{ status: 'conflict', current }`, no aplica. `updated_at` de notas se fuerza
+>   estrictamente creciente (`nextTimestamp`) — sin esto dos guardados en el mismo
+>   ms compartían testigo y el check fallaba (bug que destapó un test flaky).
+> - `sockets/notes.js` `update-note` responde por **ack** de socket.io
+>   (`{ status, note }`); en `ok` además difunde `note-updated`. `safeOn`/`safeAuthedOn`
+>   ahora reenvían el ack al handler.
+> - `useNotes` → `updateNote` devuelve `Promise<UpdateNoteResult>` (`socket.timeout(5000).emit`).
+>   `Notes.tsx`: `baseRef` (versión + contenido base), banner de conflicto con
+>   "Cargar la versión actual", y un lector sin cambios adopta las ediciones ajenas
+>   en vivo.
+> - Tests: `test/notes.test.js` (5) + e2e headless con 2 pestañas (B ve el título de
+>   A, adopta su edición en vivo, choca al guardar sobre versión obsoleta, resuelve).
+> - Eventos: revisados, no lo necesitan (guardado explícito por modal, no auto-save;
+>   edición de series → Fase 5).
 
 **Objetivo:** no perder ediciones concurrentes en el módulo más frágil.
 
