@@ -1,14 +1,4 @@
-import type { EventCategory, RecurrenceRule } from '../../types'
-
-export const CATEGORIES: Record<EventCategory, { label: string; icon: string; color: string }> = {
-  otro:       { label: 'Otro',       icon: '📌', color: '#8E8E93' },
-  personal:   { label: 'Personal',   icon: '🏠', color: '#30D158' },
-  trabajo:    { label: 'Trabajo',    icon: '💼', color: '#0071E3' },
-  social:     { label: 'Social',     icon: '🎉', color: '#BF5AF2' },
-  cumpleanos: { label: 'Cumpleaños', icon: '🎂', color: '#FF375F' },
-  vacaciones: { label: 'Vacaciones', icon: '✈️',  color: '#FF9F0A' },
-  salud:      { label: 'Salud',      icon: '❤️',  color: '#FF453A' },
-}
+import type { RecurrenceRule } from '../../types'
 
 export const RECURRENCE_LABELS: Record<RecurrenceRule, string> = {
   none:            'Sin repetición',

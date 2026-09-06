@@ -54,19 +54,21 @@ protegidas con contraseña** y comparten tres módulos: **Calendario**, **Listas
 
 ## Base de datos (SQLite)
 
-`server/db.js` crea las tablas con `CREATE TABLE IF NOT EXISTS` y **migra columnas
-nuevas con `ALTER TABLE`** comprobando antes si existen (patrón usado para
-`category`, `recurrence_rule`, `recurrence_id`, `reminder_offset`, `reminder_sent`).
+`server/db/schema.js` crea las tablas con `CREATE TABLE IF NOT EXISTS`;
+`server/db/migrations.js` **migra columnas nuevas con `ALTER TABLE`** comprobando
+antes si existen (`event`: `category`, `color`, `recurrence_rule`, `recurrence_id`,
+`reminder_offset`, `reminder_sent`; `room_style`: `event_colors`).
 
 - **room**: `name` (PK), `password_hash` (scrypt + salt aleatoria), `created_at`
 - **room_style**: `room` (PK, FK→room, ON DELETE CASCADE), `primary_color`,
-  `background_color`, `text_color`, `sidebar_color` (todos hex nullable). Fila
-  opcional: si no existe, el cliente usa colores por defecto.
+  `background_color`, `text_color`, `sidebar_color` (hex nullable),
+  `event_colors` (JSON array de hex — paleta de colores de evento). Fila
+  opcional: si no existe, colores por defecto y `event_colors: []`.
 - **event**: `id` (UUID), `room`, `title`, `start`, `end`, `description` (`''`),
-  `category` (`'otro'` por defecto), `recurrence_rule` (nullable),
-  `recurrence_id` (nullable, UUID compartido por la serie), `reminder_offset`
-  (minutos antes del inicio; null = sin aviso), `reminder_sent` (0/1),
-  `updated_at`
+  `color` (hex `#rrggbb` o null → hereda `primary_color`), `category` (legacy, el
+  cliente ya no la usa), `recurrence_rule` (nullable), `recurrence_id` (nullable,
+  UUID compartido por la serie — también comparten `color`), `reminder_offset`
+  (minutos antes del inicio; null = sin aviso), `reminder_sent` (0/1), `updated_at`
 - **list**: `id` (UUID), `room` (FK→room, CASCADE), `title`, `created_at`,
   `updated_at`
 - **list_item**: `id` (UUID), `list_id` (FK→list, CASCADE), `room`, `text`,
@@ -127,12 +129,15 @@ golpe al crear, insertadas en batch con un `recurrence_id` compartido:
 - Al editar `start` o `reminder_offset` de un evento ya "avisado", el servidor
   hace `resetReminderSent` (en series, resetea todas las instancias).
 
-## Categorías de evento
+## Colores de evento
 
-En `client/src/features/calendar/categories.ts` (`CATEGORIES`), cada una con
-label, icono emoji y color hex: `otro, personal, trabajo, social, cumpleanos,
-vacaciones, salud`. Si la categoría es `'otro'`, se usa el `primary_color` de la
-sala como color del evento.
+No hay categorías. Cada sala define su **paleta** de colores en Ajustes
+(`RoomSettings` → "Colores de eventos", persistida en `room_style.event_colors`,
+viaja en `update-room-style`). Al crear/editar un evento se elige un color de la
+paleta o "Por defecto" (`color: null` → hereda el `primary_color`). El texto del
+evento se pinta blanco u oscuro según contraste (`shared/color.ts`). El filtro de
+`EventsPanel` es por color (oculto si la paleta está vacía). Constantes de
+recurrencia/recordatorio en `client/src/features/calendar/options.ts`.
 
 ## Notificaciones push
 
@@ -151,10 +156,10 @@ SocketProvider           # context de estado de conexión ('connecting'|'connect
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home / create / join — auth con timeout de red de 8s (awaitAuthResponse)
     └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost
-        ├── RoomSettings # modal de colores con presets claro/oscuro + preview (emits update-room-style)
-        ├── Calendar     # recibe events + onCreate/Update/DeleteEvent por props (no toca socket)
-        │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por categoría
-        │   └── EventModal   # crear/editar/borrar evento — categorías, recurrencia, hora opcional, recordatorio
+        ├── RoomSettings # colores de sala + paleta de colores de evento (emits update-room-style)
+        ├── Calendar     # recibe events + paletteColors + onCreate/Update/DeleteEvent por props (no toca socket)
+        │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por color
+        │   └── EventModal   # crear/editar/borrar evento — color de la paleta, recurrencia, hora opcional, recordatorio
         ├── Lists        # datos + callbacks por props
         └── Notes        # editor con auto-save 600ms — datos + callbacks por props
 ```
@@ -173,7 +178,7 @@ El Dashboard calcula CSS custom properties inline a partir de los colores de la
 sala, derivando extras según si el fondo es oscuro o claro (`isColorDark`):
 
 ```
---primary   → primary_color      (botones, highlights, categoría "otro")
+--primary   → primary_color      (botones, highlights, color de evento por defecto)
 --bg        → background_color    (fondo principal)
 --text      → text_color          (texto)
 --surface   → sidebar_color       (tarjetas, header, modales)
@@ -189,22 +194,23 @@ Si una propiedad es null → valor por defecto (paleta clara tipo Apple:
 ## Tipos TypeScript (client)
 
 ```typescript
-type EventCategory = 'otro' | 'personal' | 'trabajo' | 'social' | 'cumpleanos' | 'vacaciones' | 'salud'
 type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-first' | 'monthly-last' | 'annual'
 
 interface Event {
   id: string; room: string; title: string
   start: string; end: string; description: string
-  category: EventCategory
+  color: string | null   // hex #rrggbb; null = hereda primary_color
   recurrence_rule: RecurrenceRule | null
   recurrence_id: string | null
   reminder_offset: number | null   // minutos antes del inicio; null = sin aviso
+  reminder_sent: 0 | 1
 }
 
 interface Room {
   name: string; created_at?: string
   primary_color: string | null; background_color: string | null
   text_color: string | null; sidebar_color: string | null
+  event_colors: string[]   // paleta de la sala
 }
 
 interface List     { id: string; room: string; title: string; created_at: string }
@@ -218,7 +224,7 @@ interface Note     { id: string; room: string; title: string; body: string; crea
 features/
   auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css
   dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, categories.ts
+  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio)
   lists/        Lists + lists.css
   settings/     RoomSettings + room-settings.css
   notes/        Notes + notes.css
@@ -228,7 +234,7 @@ socket/         client.ts (io singleton + rememberRoom/forgetRoom + re-join), So
                 (context de estado de conexión), useConnection, ConnectionBanner
                 (barra "Sin conexión" tras 3s), authFlow.ts (awaitAuthResponse:
                 timeout de red 8s en el login), index.ts (barrel)
-shared/         modal.css (base de modal, usado por EventModal y RoomSettings)
+shared/         modal.css (base de modal), color.ts (isColorDark / readableTextColor)
 hooks/          useIsMobile (breakpoint 640px)
 push.ts         helpers Web Push (subscribeToPush, getCurrentSubscription)
 types.ts        tipos compartidos

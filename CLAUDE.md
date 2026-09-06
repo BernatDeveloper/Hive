@@ -58,8 +58,9 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 | background_color | TEXT | hex, nullable |
 | text_color | TEXT | hex, nullable |
 | sidebar_color | TEXT | hex, nullable |
+| event_colors | TEXT | JSON array de hex (paleta de colores de evento); `[]` si null |
 
-- Fila opcional: si no existe, el cliente usa los colores por defecto
+- Fila opcional: si no existe, el cliente usa los colores por defecto y `event_colors: []`
 - Permite añadir más propiedades de estilo sin tocar la tabla `room`
 
 ### Tabla `event`
@@ -71,12 +72,14 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 | start | TEXT | ISO datetime (con o sin hora) |
 | end | TEXT | ISO datetime |
 | description | TEXT | default '' |
-| category | TEXT | default `'otro'`, ver `EventCategory` |
+| category | TEXT | **legacy**, default `'otro'`; el cliente ya no la usa (la migración a `color` la leyó una vez para el backfill). No se borra |
+| color | TEXT | nullable; hex `#rrggbb`. null = hereda el `primary_color` de la sala |
 | recurrence_rule | TEXT | nullable; `daily/weekly/monthly/monthly-first/monthly-last/annual` |
-| recurrence_id | TEXT | nullable; UUID compartido por todas las instancias de una serie |
+| recurrence_id | TEXT | nullable; UUID compartido por todas las instancias de una serie (comparten también `color`) |
 | updated_at | TEXT | updated on each write, used for cleanup |
 
-- `server/db/migrations.js` migra automáticamente (`ALTER TABLE`) las columnas `category`, `recurrence_rule`, `recurrence_id`, `reminder_offset`, `reminder_sent` si faltan en una DB existente
+- `server/db/migrations.js` migra automáticamente (`ALTER TABLE`) las columnas `category`, `color`, `recurrence_rule`, `recurrence_id`, `reminder_offset`, `reminder_sent` (event) y `event_colors` (room_style) si faltan
+- Al añadir `event.color` hace **backfill** desde `category` (mapa hex de las categorías antiguas; `'otro'` → null)
 
 ### Tabla `list`
 | column | type | notes |
@@ -130,13 +133,15 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 ### Payload `access-granted`
 ```typescript
 {
-  room: { name, created_at, primary_color, background_color, text_color, sidebar_color },
+  room: { name, created_at, primary_color, background_color, text_color, sidebar_color, event_colors: string[] },
   events: Event[],
   lists: List[],
   listItems: ListItem[],
   notes: Note[]
 }
 ```
+
+El payload `styles` de `update-room-style` puede incluir `event_colors: string[]` (la paleta); si se omite, el servidor conserva la guardada. Se sanea a hex `#rrggbb`, sin duplicados, tope 12.
 
 ## Eventos recurrentes
 
@@ -151,15 +156,16 @@ Al crear un evento con `recurrence_rule !== 'none'`, el servidor (`generateRecur
 | `monthly-last` | 36 meses, último día de cada mes |
 | `annual` | 10 años |
 
-- Editar o eliminar cualquier instancia de una serie (evento con `recurrence_id`) afecta a **todas** las instancias (`updateSeries` / `deleteSeries`)
+- Editar o eliminar cualquier instancia de una serie (evento con `recurrence_id`) afecta a **todas** las instancias (`updateSeries` / `deleteSeries`); las instancias comparten `color`
 - El selector de recurrencia solo aparece al crear (no al editar un evento ya existente ni una serie)
 
-## Categorías de evento
+## Colores de evento
 
-Definidas en `client/src/features/calendar/categories.ts` (`CATEGORIES`), cada una con label, icono emoji y color hex: `otro, personal, trabajo, social, cumpleanos, vacaciones, salud`. Se usan para:
-- Colorear el evento en FullCalendar y en el panel de próximos eventos (si es `'otro'`, se usa el `primary_color` de la sala en su lugar)
-- Pills de selección en `EventModal`
-- Chips de filtro en `EventsPanel`
+No hay categorías. Cada sala define su **paleta** de colores de evento en Ajustes (`RoomSettings` → "Colores de eventos", persistida en `room_style.event_colors`). Al crear/editar un evento se elige un color de esa paleta o "Por defecto" (`color: null` → hereda el `primary_color` de la sala). Se usa para:
+- Fondo del evento en FullCalendar (texto blanco/oscuro según contraste, `readableTextColor` en `client/src/shared/color.ts`) y punto en el panel de próximos eventos
+- Swatches de selección en `EventModal` ("Por defecto" + `room.event_colors`)
+- Chips de filtro por color en `EventsPanel` (ocultos si la paleta está vacía)
+- Constantes de recurrencia/recordatorio: `client/src/features/calendar/options.ts` (ex-`categories.ts`)
 
 ## Flujo de usuario
 
@@ -169,7 +175,7 @@ Definidas en `client/src/features/calendar/categories.ts` (`CATEGORIES`), cada u
    - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
 4. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
 5. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
-6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro y preview en vivo (guardados en `room_style`)
+6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo y **paleta de colores de evento** (guardados en `room_style`)
 7. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
 
 ## Estructura de componentes
@@ -182,8 +188,8 @@ SocketProvider           # context de estado de conexión
     └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost + navegación
         ├── RoomSettings # color modal con presets + preview (emits update-room-style, subscribe-push)
         ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props
-        │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por categoría
-        │   └── EventModal   # create/edit/delete evento — categorías, recurrencia, hora opcional
+        │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por color
+        │   └── EventModal   # create/edit/delete evento — color de la paleta, recurrencia, hora opcional
         ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props
         └── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props
 ```
@@ -194,7 +200,7 @@ SocketProvider           # context de estado de conexión
 
 El Dashboard calcula CSS custom properties inline a partir de los colores de la sala, derivando extras según si el fondo es oscuro o claro (`isColorDark`):
 ```
---primary   → primary_color     (botones, highlights, categoría "otro")
+--primary   → primary_color     (botones, highlights, color de evento por defecto)
 --bg        → background_color  (fondo principal)
 --text      → text_color        (texto)
 --surface   → sidebar_color     (tarjetas, header, modales)
@@ -207,21 +213,22 @@ Si una propiedad es null, el componente usa el valor por defecto (paleta clara t
 ## Tipos TypeScript (client)
 
 ```typescript
-type EventCategory = 'otro' | 'personal' | 'trabajo' | 'social' | 'cumpleanos' | 'vacaciones' | 'salud'
 type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-first' | 'monthly-last' | 'annual'
 
 interface Event {
   id: string; room: string; title: string
   start: string; end: string; description: string
-  category: EventCategory
+  color: string | null   // hex #rrggbb; null = hereda primary_color
   recurrence_rule: RecurrenceRule | null
   recurrence_id: string | null
+  reminder_offset: number | null; reminder_sent: 0 | 1
 }
 
 interface Room {
   name: string; created_at?: string
   primary_color: string | null; background_color: string | null
   text_color: string | null; sidebar_color: string | null
+  event_colors: string[]   // paleta de la sala
 }
 
 interface List {
@@ -255,7 +262,7 @@ interface Note {
 features/
   auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css
   dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave)
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, categories.ts, useEvents
+  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents
   lists/        Lists + lists.css, useLists
   settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
   notes/        Notes + notes.css, useNotes
@@ -268,6 +275,7 @@ socket/
   connection-context.ts / connection-banner.css / index.ts (barrel)
 shared/
   modal.css     estilos base del modal (usado por EventModal y RoomSettings)
+  color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar, EventModal)
 hooks/
   useIsMobile           breakpoint responsive (default 640px)
 push.ts         helpers de suscripción a Web Push (subscribeToPush, getCurrentSubscription)

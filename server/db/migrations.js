@@ -19,6 +19,29 @@ export function runMigrations() {
   if (!eventCols.includes('reminder_sent')) {
     db.exec('ALTER TABLE event ADD COLUMN reminder_sent INTEGER DEFAULT 0')
   }
+  if (!eventCols.includes('color')) {
+    db.exec('ALTER TABLE event ADD COLUMN color TEXT')
+    // Backfill: los eventos existentes conservan el color de su antigua
+    // categoría (mapa replicado de client/src/features/calendar/categories.ts,
+    // que se elimina). 'otro' → NULL → renderiza el primary_color de la sala.
+    db.exec(`
+      UPDATE event SET color = CASE category
+        WHEN 'personal'   THEN '#30d158'
+        WHEN 'trabajo'    THEN '#0071e3'
+        WHEN 'social'     THEN '#bf5af2'
+        WHEN 'cumpleanos' THEN '#ff375f'
+        WHEN 'vacaciones' THEN '#ff9f0a'
+        WHEN 'salud'      THEN '#ff453a'
+        ELSE NULL
+      END
+      WHERE color IS NULL
+    `)
+  }
+
+  const styleCols = db.prepare('PRAGMA table_info(room_style)').all().map(c => c.name)
+  if (!styleCols.includes('event_colors')) {
+    db.exec('ALTER TABLE room_style ADD COLUMN event_colors TEXT')
+  }
 
   // Depende de reminder_sent, por eso va aquí y no en createSchema().
   db.exec('CREATE INDEX IF NOT EXISTS idx_event_reminder ON event(reminder_sent, start)')

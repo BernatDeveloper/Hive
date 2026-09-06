@@ -200,7 +200,24 @@ el server con la sala abierta y vuelve, el estado se resincroniza solo.
 
 ---
 
-## Tarea D — Categorías → color personalizable por sala
+## Tarea D — Categorías → color personalizable por sala ✅ HECHA
+
+> Completada (D0 storage = columna JSON `event_colors` en `room_style`).
+> - **Server:** `event.color TEXT` + `room_style.event_colors TEXT` (schema + migración con
+>   comprobación). `db/rooms.js` sanea/persiste la paleta (hex #rrggbb, sin dup, tope 12) y
+>   la devuelve en `access-granted`; `update-room-style` sin `event_colors` conserva la
+>   guardada. `db/events.js` `sanitizeColor` en INSERT/UPDATE de las 4 funciones;
+>   `recurrence.js` propaga `color` a las instancias.
+> - **D3:** backfill en la misma migración (`UPDATE event SET color = CASE category …`),
+>   `'otro'` → null. `category` se queda en la DB.
+> - **Client:** `EventCategory` fuera; `Event.color`, `Room.event_colors`. `categories.ts` →
+>   `options.ts` (solo recurrencia/recordatorio). `shared/color.ts` (`isColorDark`,
+>   `readableTextColor`). `RoomSettings` sección "Colores de eventos". `EventModal` swatches
+>   ("Por defecto" + paleta). `Calendar` `color ?? primary`, texto por contraste.
+>   `EventsPanel` filtro por color (oculto si paleta vacía). `Dashboard` pasa `paletteColors`.
+> - Verificado: smoke socket (paleta + color + serie + rejoin), migración+backfill sobre
+>   copia de la DB real, e2e headless (definir paleta, crear evento con color, filtrar,
+>   serie comparte color, recarga persiste). tsc/lint/build OK.
 
 **Objetivo:** eliminar las categorías de evento. **La sala define su propia paleta
 de colores de evento en la configuración (`RoomSettings`).** Al crear un evento se

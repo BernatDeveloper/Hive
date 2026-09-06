@@ -8,12 +8,13 @@ import esLocale from '@fullcalendar/core/locales/es'
 import type { Event } from '../../types'
 import EventModal from './EventModal'
 import EventsPanel from './EventsPanel'
-import { CATEGORIES } from './categories'
+import { readableTextColor } from '../../shared/color'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Props {
   events: Event[]
   primaryColor?: string
+  paletteColors: string[]
   onCreateEvent: (data: Partial<Event>) => void
   onUpdateEvent: (data: Partial<Event>) => void
   onDeleteEvent: (id: string) => void
@@ -26,7 +27,7 @@ interface ModalState {
   end?: string
 }
 
-export default function Calendar({ events, primaryColor = '#0071E3', onCreateEvent, onUpdateEvent, onDeleteEvent }: Props) {
+export default function Calendar({ events, primaryColor = '#0071E3', paletteColors, onCreateEvent, onUpdateEvent, onDeleteEvent }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [mobileView, setMobileView] = useState<'calendar' | 'events'>('calendar')
   const isMobile = useIsMobile()
@@ -55,21 +56,22 @@ export default function Calendar({ events, primaryColor = '#0071E3', onCreateEve
   }
 
   function eventColor(e: Event): string {
-    return (!e.category || e.category === 'otro')
-      ? primaryColor
-      : CATEGORIES[e.category].color
+    return e.color ?? primaryColor
   }
 
-  const fcEvents = events.map(e => ({
-    id: e.id,
-    title: e.title,
-    start: e.start,
-    end: e.end,
-    backgroundColor: eventColor(e),
-    borderColor: 'transparent',
-    textColor: '#fff',
-    extendedProps: { description: e.description, category: e.category },
-  }))
+  const fcEvents = events.map(e => {
+    const bg = eventColor(e)
+    return {
+      id: e.id,
+      title: e.title,
+      start: e.start,
+      end: e.end,
+      backgroundColor: bg,
+      borderColor: 'transparent',
+      textColor: readableTextColor(bg),
+      extendedProps: { description: e.description },
+    }
+  })
 
   return (
     <div className="calendar-container">
@@ -95,6 +97,7 @@ export default function Calendar({ events, primaryColor = '#0071E3', onCreateEve
           <EventsPanel
             events={events}
             primaryColor={primaryColor}
+            paletteColors={paletteColors}
             onNewEvent={() => setModal({ open: true })}
             onEventClick={ev => setModal({ open: true, event: ev })}
           />
@@ -135,6 +138,8 @@ export default function Calendar({ events, primaryColor = '#0071E3', onCreateEve
           event={modal.event}
           start={modal.start}
           end={modal.end}
+          paletteColors={paletteColors}
+          primaryColor={primaryColor}
           onSave={save}
           onDelete={remove}
           onClose={() => setModal({ open: false })}

@@ -1,17 +1,16 @@
 import { useState } from 'react'
-import type { Event, EventCategory } from '../../types'
-import { CATEGORIES } from './categories'
+import type { Event } from '../../types'
 
 interface Props {
   events: Event[]
   primaryColor?: string
+  paletteColors: string[]
   onNewEvent: () => void
   onEventClick: (event: Event) => void
 }
 
-type Filter = 'all' | EventCategory
-
-const CAT_ENTRIES = Object.entries(CATEGORIES) as [EventCategory, (typeof CATEGORIES)[EventCategory]][]
+// 'all' o un hex de la paleta de la sala.
+type Filter = 'all' | string
 
 function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -48,13 +47,16 @@ function getTimeStr(str: string): string {
   return t === '00:00' ? '' : t
 }
 
-export default function EventsPanel({ events, primaryColor = '#0071E3', onNewEvent, onEventClick }: Props) {
+export default function EventsPanel({ events, primaryColor = '#0071E3', paletteColors, onNewEvent, onEventClick }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
+
+  // La paleta puede haber cambiado: si el color filtrado ya no existe, "Todos".
+  const activeFilter = filter !== 'all' && !paletteColors.includes(filter) ? 'all' : filter
 
   const today = todayStr()
   const upcoming = events
     .filter(e => localDateKey(e.start) >= today)
-    .filter(e => filter === 'all' || e.category === filter)
+    .filter(e => activeFilter === 'all' || e.color === activeFilter)
     .sort((a, b) => a.start.localeCompare(b.start))
 
   const grouped = new Map<string, Event[]>()
@@ -71,25 +73,27 @@ export default function EventsPanel({ events, primaryColor = '#0071E3', onNewEve
         <button className="btn-primary events-panel-new" onClick={onNewEvent}>+ Nuevo</button>
       </div>
 
-      <div className="events-panel-filters">
-        <button
-          className={`events-filter-chip${filter === 'all' ? ' events-filter-chip--on' : ''}`}
-          onClick={() => setFilter('all')}
-        >
-          Todos
-        </button>
-        {CAT_ENTRIES.map(([key, cat]) => (
+      {paletteColors.length > 0 && (
+        <div className="events-panel-filters">
           <button
-            key={key}
-            className={`events-filter-chip${filter === key ? ' events-filter-chip--on' : ''}`}
-            style={filter === key ? { background: cat.color, borderColor: cat.color, color: '#fff' } : {}}
-            onClick={() => setFilter(filter === key ? 'all' : key)}
-            title={cat.label}
+            className={`events-filter-chip${activeFilter === 'all' ? ' events-filter-chip--on' : ''}`}
+            onClick={() => setFilter('all')}
           >
-            {cat.icon}
+            Todos
           </button>
-        ))}
-      </div>
+          {paletteColors.map(c => (
+            <button
+              key={c}
+              className={`events-filter-chip events-filter-chip--swatch${activeFilter === c ? ' events-filter-chip--on' : ''}`}
+              style={{ background: c, borderColor: c }}
+              onClick={() => setFilter(activeFilter === c ? 'all' : c)}
+              title={`Filtrar por ${c}`}
+              aria-label={`Filtrar por color ${c}`}
+              aria-pressed={activeFilter === c}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="events-panel-list">
         {grouped.size === 0 ? (
@@ -99,9 +103,7 @@ export default function EventsPanel({ events, primaryColor = '#0071E3', onNewEve
             <div key={dateKey} className="events-panel-day">
               <div className="events-panel-day-label">{getDateLabel(dateKey)}</div>
               {dayEvents.map(ev => {
-                const dotColor = (!ev.category || ev.category === 'otro')
-                  ? primaryColor
-                  : CATEGORIES[ev.category].color
+                const dotColor = ev.color ?? primaryColor
                 const time = getTimeStr(ev.start)
                 return (
                   <button

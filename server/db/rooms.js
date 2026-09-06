@@ -1,6 +1,31 @@
 import { db } from './connection.js'
 import { hashPassword, verifyPassword } from '../auth/password.js'
 
+const HEX = /^#[0-9a-fA-F]{6}$/
+const MAX_EVENT_COLORS = 12
+
+// Normaliza la paleta de colores de evento: array de hex #rrggbb, sin
+// duplicados, tope de 12. Devuelve [] ante cualquier entrada inválida.
+function sanitizeEventColors(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  for (const c of value) {
+    if (typeof c === 'string' && HEX.test(c)) seen.add(c.toLowerCase())
+    if (seen.size >= MAX_EVENT_COLORS) break
+  }
+  return [...seen]
+}
+
+// Parsea la columna JSON `event_colors`. [] si es null o no parsea.
+function parseEventColors(json) {
+  if (!json) return []
+  try {
+    return sanitizeEventColors(JSON.parse(json))
+  } catch {
+    return []
+  }
+}
+
 export function createRoom(name, password) {
   if (db.prepare('SELECT name FROM room WHERE name = ?').get(name)) {
     return { ok: false, error: 'El nombre de sala ya existe' }
@@ -28,15 +53,21 @@ export function verifyRoomAccess(name, password) {
       background_color: styles?.background_color ?? null,
       text_color: styles?.text_color ?? null,
       sidebar_color: styles?.sidebar_color ?? null,
+      event_colors: parseEventColors(styles?.event_colors),
     }
   }
 }
 
 export function updateRoomStyle(name, styles) {
   const { primary_color, background_color, text_color, sidebar_color } = styles
+  // INSERT OR REPLACE reescribe la fila entera: si el payload no trae
+  // `event_colors`, se conserva la paleta ya guardada.
+  const event_colors = 'event_colors' in styles
+    ? sanitizeEventColors(styles.event_colors)
+    : parseEventColors(db.prepare('SELECT event_colors FROM room_style WHERE room = ?').get(name)?.event_colors)
   db.prepare(`
-    INSERT OR REPLACE INTO room_style (room, primary_color, background_color, text_color, sidebar_color)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(name, primary_color, background_color, text_color, sidebar_color)
-  return { name, primary_color, background_color, text_color, sidebar_color }
+    INSERT OR REPLACE INTO room_style (room, primary_color, background_color, text_color, sidebar_color, event_colors)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(name, primary_color, background_color, text_color, sidebar_color, JSON.stringify(event_colors))
+  return { name, primary_color, background_color, text_color, sidebar_color, event_colors }
 }

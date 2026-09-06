@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import '../../shared/modal.css'
-import type { Event, EventCategory, RecurrenceRule } from '../../types'
-import { CATEGORIES, RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './categories'
+import type { Event, RecurrenceRule } from '../../types'
+import { RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './options'
+import { readableTextColor } from '../../shared/color'
 
 interface Props {
   event?: Partial<Event>
   start?: string
   end?: string
+  paletteColors: string[]
+  primaryColor: string
   onSave: (event: Partial<Event>) => void
   onDelete: (id: string) => void
   onClose: () => void
@@ -46,7 +49,6 @@ function formatDateShort(dateStr: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
 }
 
-const CAT_ENTRIES = Object.entries(CATEGORIES) as [EventCategory, (typeof CATEGORIES)[EventCategory]][]
 const REC_ENTRIES = Object.entries(RECURRENCE_OPTIONS) as [RecurrenceRule, (typeof RECURRENCE_OPTIONS)[RecurrenceRule]][]
 
 // Selector de hora en 24h propio: el <input type="time"> nativo muestra
@@ -70,13 +72,13 @@ function TimeSelect({ value, onChange, label }: { value: string; onChange: (v: s
   )
 }
 
-export default function EventModal({ event, start, end, onSave, onDelete, onClose }: Props) {
+export default function EventModal({ event, start, end, paletteColors, primaryColor, onSave, onDelete, onClose }: Props) {
   const isEdit = !!event?.id
   const isSeries = !!event?.recurrence_id
 
   const [title, setTitle] = useState(event?.title ?? '')
   const [description, setDescription] = useState(event?.description ?? '')
-  const [category, setCategory] = useState<EventCategory>(event?.category ?? 'otro')
+  const [color, setColor] = useState<string | null>(event?.color ?? null)
   const [recurrence, setRecurrence] = useState<RecurrenceRule>('none')
   const [reminderOffset, setReminderOffset] = useState<number | null>(event?.reminder_offset ?? null)
 
@@ -131,7 +133,7 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
         start: event!.start,
         end:   event!.end,
         description: description.trim(),
-        category,
+        color,
         recurrence_rule: event?.recurrence_rule ?? null,
         recurrence_id:   event?.recurrence_id   ?? null,
         reminder_offset: reminderOffset,
@@ -159,7 +161,7 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
       start: finalStart,
       end:   finalEnd,
       description: description.trim(),
-      category,
+      color,
       recurrence_rule: isEdit
         ? (event?.recurrence_rule ?? null)
         : (recurrence === 'none' ? null : recurrence),
@@ -175,24 +177,31 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Editar evento' : 'Nuevo evento'}</h3>
 
-        {/* Category pills */}
-        <div className="event-categories">
-          {CAT_ENTRIES.map(([key, cat]) => {
-            const isActive = category === key
-            const isOtro   = key === 'otro'
-            return (
-              <button
-                key={key}
-                type="button"
-                className={`event-cat-pill${isActive ? ' event-cat-pill--on' : ''}${isActive && isOtro ? ' event-cat-pill--none' : ''}`}
-                style={isActive && !isOtro ? { background: cat.color, borderColor: cat.color } : {}}
-                onClick={() => setCategory(key)}
-              >
-                <span>{cat.icon}</span>
-                <span>{cat.label}</span>
-              </button>
-            )
-          })}
+        {/* Color swatches */}
+        <div className="event-colors">
+          <button
+            type="button"
+            className={`event-color-swatch${color === null ? ' event-color-swatch--on' : ''}`}
+            style={{ background: primaryColor, color: readableTextColor(primaryColor) }}
+            onClick={() => setColor(null)}
+            aria-label="Color por defecto"
+            aria-pressed={color === null}
+          >
+            {color === null && '✓'}
+          </button>
+          {paletteColors.map(c => (
+            <button
+              key={c}
+              type="button"
+              className={`event-color-swatch${color === c ? ' event-color-swatch--on' : ''}`}
+              style={{ background: c, color: readableTextColor(c) }}
+              onClick={() => setColor(c)}
+              aria-label={`Color ${c}`}
+              aria-pressed={color === c}
+            >
+              {color === c && '✓'}
+            </button>
+          ))}
         </div>
 
         {/* Title */}

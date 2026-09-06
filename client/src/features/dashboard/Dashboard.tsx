@@ -42,7 +42,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  const { colors, cssVars, roomWithColors } = useRoomStyle(room, onUpdateRoom)
+  const { colors, cssVars, roomWithColors, eventColors } = useRoomStyle(room, onUpdateRoom)
   const cal = useEvents(room.name, initialEvents)
   const lists = useLists(room.name, initialLists, initialListItems)
   const notes = useNotes(room.name, initialNotes)
@@ -82,6 +82,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
           <Calendar
             events={cal.events}
             primaryColor={colors.primary_color ?? '#0071E3'}
+            paletteColors={eventColors}
             onCreateEvent={cal.createEvent}
             onUpdateEvent={cal.updateEvent}
             onDeleteEvent={cal.deleteEvent}

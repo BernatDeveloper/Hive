@@ -1,4 +1,3 @@
-export type EventCategory = 'otro' | 'personal' | 'trabajo' | 'social' | 'cumpleanos' | 'vacaciones' | 'salud'
 export type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-first' | 'monthly-last' | 'annual'
 
 export interface Event {
@@ -8,7 +7,7 @@ export interface Event {
   start: string
   end: string
   description: string
-  category: EventCategory
+  color: string | null   // hex #rrggbb; null = hereda el primary_color de la sala
   recurrence_rule: RecurrenceRule | null
   recurrence_id: string | null
   reminder_offset: number | null
@@ -21,6 +20,7 @@ export interface Room {
   background_color: string | null
   text_color: string | null
   sidebar_color: string | null
+  event_colors: string[]   // paleta de colores de evento definida en Ajustes
   created_at?: string
 }
 

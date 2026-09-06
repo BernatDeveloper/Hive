@@ -17,7 +17,8 @@ export function createSchema() {
       primary_color TEXT,
       background_color TEXT,
       text_color TEXT,
-      sidebar_color TEXT
+      sidebar_color TEXT,
+      event_colors TEXT
     )
   `)
 
@@ -30,6 +31,7 @@ export function createSchema() {
       end TEXT NOT NULL,
       description TEXT DEFAULT '',
       category TEXT DEFAULT 'otro',
+      color TEXT,
       recurrence_rule TEXT,
       recurrence_id TEXT,
       updated_at TEXT DEFAULT (datetime('now'))

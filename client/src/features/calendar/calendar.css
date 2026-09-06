@@ -103,6 +103,18 @@
   color: #fff;
 }
 
+/* Chip como swatch de color de la paleta */
+.events-filter-chip--swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+}
+.events-filter-chip--swatch:hover { background: initial; transform: scale(1.1); }
+.events-filter-chip--swatch.events-filter-chip--on {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
+}
+
 .events-panel-list {
   flex: 1;
   overflow-y: auto;
@@ -178,39 +190,32 @@
 
 .events-panel-recur { opacity: 0.7; font-size: 0.6rem; }
 
-/* ── EventModal: category pills ── */
-.event-categories {
+/* ── EventModal: color swatches ── */
+.event-colors {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
-.event-cat-pill {
+.event-color-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--border);
-  border-radius: 100px;
-  background: transparent;
-  color: var(--text);
-  font-size: 0.72rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  justify-content: center;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.event-cat-pill:hover { background: var(--surface-2); }
+.event-color-swatch:hover { transform: scale(1.08); }
 
-.event-cat-pill--on { color: #fff; }
-
-/* "otro" seleccionado: borde con guión, sin relleno de color */
-.event-cat-pill--none {
-  background: transparent !important;
-  border-style: dashed !important;
-  border-color: var(--muted) !important;
-  color: var(--text) !important;
+.event-color-swatch--on {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
 }
 
 /* ── EventModal: recurrence grid ── */

@@ -41,6 +41,10 @@ const PRESETS = {
   },
 }
 
+const MAX_EVENT_COLORS = 12
+// Colores que propone "+ Añadir" antes de que el usuario los ajuste.
+const SUGGESTED_COLORS = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff375f', '#ff453a', '#64d2ff', '#ffd60a']
+
 export default function RoomSettings({ room, onClose, onLeave }: Props) {
   const [colors, setColors] = useState({
     primary_color: room.primary_color ?? PRESETS.light.primary_color,
@@ -48,6 +52,8 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
     text_color: room.text_color ?? PRESETS.light.text_color,
     sidebar_color: room.sidebar_color ?? PRESETS.light.sidebar_color,
   })
+
+  const [eventColors, setEventColors] = useState<string[]>(room.event_colors ?? [])
 
   function change(key: keyof typeof colors, value: string) {
     setColors(prev => ({ ...prev, [key]: value }))
@@ -57,8 +63,20 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
     setColors({ ...PRESETS[preset] })
   }
 
+  function changeEventColor(index: number, value: string) {
+    setEventColors(prev => prev.map((c, i) => (i === index ? value.toLowerCase() : c)))
+  }
+
+  function removeEventColor(index: number) {
+    setEventColors(prev => prev.filter((_, i) => i !== index))
+  }
+
+  function addEventColor() {
+    setEventColors(prev => [...prev, SUGGESTED_COLORS[prev.length % SUGGESTED_COLORS.length]])
+  }
+
   function save() {
-    socket.emit('update-room-style', { name: room.name, styles: colors })
+    socket.emit('update-room-style', { name: room.name, styles: { ...colors, event_colors: eventColors } })
     onClose()
   }
 
@@ -135,6 +153,41 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-event-colors-head">
+            <span className="settings-presets-label">Colores de eventos</span>
+            {eventColors.length < MAX_EVENT_COLORS && (
+              <button type="button" className="settings-preset-btn" onClick={addEventColor}>+ Añadir</button>
+            )}
+          </div>
+          {eventColors.length === 0 ? (
+            <p className="settings-notify-text" style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
+              Sin colores. Los eventos usarán el color primario de la sala.
+            </p>
+          ) : (
+            <div className="settings-event-colors">
+              {eventColors.map((c, i) => (
+                <div key={i} className="settings-event-color">
+                  <input
+                    type="color"
+                    value={c}
+                    onChange={e => changeEventColor(i, e.target.value)}
+                    aria-label={`Color de evento ${i + 1}`}
+                  />
+                  <button
+                    type="button"
+                    className="settings-event-color-remove"
+                    onClick={() => removeEventColor(i)}
+                    aria-label={`Quitar color ${i + 1}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div
