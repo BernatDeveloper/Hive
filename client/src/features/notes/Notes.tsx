@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import './notes.css'
-import { socket } from '../../socket'
 import type { Note } from '../../types'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Props {
-  room: string
   notes: Note[]
+  onCreateNote: () => void
+  onUpdateNote: (id: string, title: string, body: string) => void
+  onDeleteNote: (id: string) => void
 }
 
 const IconTrash = () => (
@@ -40,7 +41,7 @@ const IconNotesPlaceholder = () => (
   </svg>
 )
 
-export default function Notes({ room, notes }: Props) {
+export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [localTitle, setLocalTitle] = useState('')
   const [localBody, setLocalBody] = useState('')
@@ -81,7 +82,7 @@ export default function Notes({ room, notes }: Props) {
     setSaveStatus('saving')
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      socket.emit('update-note', { room, note: { id: selectedId, title, body } })
+      onUpdateNote(selectedId, title, body)
       setSaveStatus('saved')
     }, 600)
   }
@@ -97,11 +98,11 @@ export default function Notes({ room, notes }: Props) {
   }
 
   function handleCreate() {
-    socket.emit('create-note', { room, title: 'Sin título' })
+    onCreateNote()
   }
 
   function handleDelete(id: string) {
-    socket.emit('delete-note', { room, id })
+    onDeleteNote(id)
     if (id === selectedId) {
       setSelectedId(null)
       if (isMobile) setMobilePage('notes')

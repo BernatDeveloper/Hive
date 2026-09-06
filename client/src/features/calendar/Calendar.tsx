@@ -5,7 +5,6 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import esLocale from '@fullcalendar/core/locales/es'
-import { socket } from '../../socket'
 import type { Event } from '../../types'
 import EventModal from './EventModal'
 import EventsPanel from './EventsPanel'
@@ -13,9 +12,11 @@ import { CATEGORIES } from './categories'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Props {
-  room: string
   events: Event[]
   primaryColor?: string
+  onCreateEvent: (data: Partial<Event>) => void
+  onUpdateEvent: (data: Partial<Event>) => void
+  onDeleteEvent: (id: string) => void
 }
 
 interface ModalState {
@@ -25,7 +26,7 @@ interface ModalState {
   end?: string
 }
 
-export default function Calendar({ room, events, primaryColor = '#0071E3' }: Props) {
+export default function Calendar({ events, primaryColor = '#0071E3', onCreateEvent, onUpdateEvent, onDeleteEvent }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [mobileView, setMobileView] = useState<'calendar' | 'events'>('calendar')
   const isMobile = useIsMobile()
@@ -41,15 +42,15 @@ export default function Calendar({ room, events, primaryColor = '#0071E3' }: Pro
 
   function save(data: Partial<Event>) {
     if (data.id) {
-      socket.emit('update-event', { room, event: data })
+      onUpdateEvent(data)
     } else {
-      socket.emit('create-event', { room, event: data })
+      onCreateEvent(data)
     }
     setModal({ open: false })
   }
 
   function remove(id: string) {
-    socket.emit('delete-event', { room, id })
+    onDeleteEvent(id)
     setModal({ open: false })
   }
 

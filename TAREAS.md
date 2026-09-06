@@ -123,7 +123,16 @@ servidor reestructurado.
 
 ---
 
-## Tarea B — Reestructurar frontend
+## Tarea B — Reestructurar frontend ✅ HECHA
+
+> Completada. `src/socket.ts` → `src/socket/` (client.ts + SocketProvider + useConnection,
+> costura para la Tarea C). Hooks por dominio `useEvents`/`useLists`/`useNotes`/`useRoomStyle`
+> + `useRoomLost`: cada uno posee su estado, sus `socket.on` con cleanup, se auto-refresca
+> desde `access-granted`, y expone acciones que envuelven `socket.emit`. `Calendar`/`Lists`/`Notes`
+> ya no importan `socket` ni reciben `room` — datos + callbacks por props. `Dashboard` 241 → 129
+> líneas (composición). Verificado: tsc + build + eslint (los 2 errores de `set-state-in-effect`
+> son pre-existentes en `Lists`/`Notes`, sin tocar), y check headless en Edge — render de los 3
+> módulos + ajustes, roundtrip emit→listener, y rehidratación tras reinicio del servidor. 0 errores.
 
 **Leer primero:** `client/src/features/dashboard/Dashboard.tsx`, `client/src/socket.ts`,
 y los componentes que consuman estado de sala (`Calendar`, `Lists`, `Notes`).
@@ -151,7 +160,9 @@ duplicados al remontar), `Dashboard` reducido a composición.
 siempre. Causa: el flujo de auth hace `socket.once('access-granted' / 'access-denied')`
 y, si el socket nunca conecta, no dispara ninguno de los dos → spinner infinito.
 
-**Leer primero:** `client/src/socket.ts`, `JoinRoomForm`, `CreateRoomForm`.
+**Leer primero:** `client/src/socket/` (client.ts, SocketProvider.tsx, useConnection.ts —
+ya existe la costura de estado de conexión de la Tarea B), `RoomEntry`, `JoinRoomForm`,
+`CreateRoomForm`.
 
 **Objetivo:** que el cliente detecte y comunique la falta de conexión, y que se
 resincronice al recuperar la red.

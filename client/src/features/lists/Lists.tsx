@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import './lists.css'
-import { socket } from '../../socket'
 import type { List, ListItem } from '../../types'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Props {
-  room: string
   lists: List[]
   listItems: ListItem[]
+  onCreateList: (title: string) => void
+  onDeleteList: (id: string) => void
+  onCreateItem: (listId: string, text: string) => void
+  onToggleItem: (id: string, checked: boolean) => void
+  onDeleteItem: (id: string) => void
 }
 
 const IconCheck = () => (
@@ -40,7 +43,7 @@ const IconListPlaceholder = () => (
   </svg>
 )
 
-export default function Lists({ room, lists, listItems }: Props) {
+export default function Lists({ lists, listItems, onCreateList, onDeleteList, onCreateItem, onToggleItem, onDeleteItem }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [newListTitle, setNewListTitle] = useState('')
   const [newItemText, setNewItemText] = useState('')
@@ -60,12 +63,12 @@ export default function Lists({ room, lists, listItems }: Props) {
     e.preventDefault()
     const title = newListTitle.trim()
     if (!title) return
-    socket.emit('create-list', { room, title })
+    onCreateList(title)
     setNewListTitle('')
   }
 
   function handleDeleteList(id: string) {
-    socket.emit('delete-list', { room, id })
+    onDeleteList(id)
     if (isMobile) setMobilePage('lists')
   }
 
@@ -80,17 +83,17 @@ export default function Lists({ room, lists, listItems }: Props) {
     e.preventDefault()
     const text = newItemText.trim()
     if (!text || !selectedId) return
-    socket.emit('create-list-item', { room, listId: selectedId, text })
+    onCreateItem(selectedId, text)
     setNewItemText('')
     newItemRef.current?.focus()
   }
 
   function handleToggleItem(item: ListItem) {
-    socket.emit('toggle-list-item', { room, id: item.id, checked: !item.checked })
+    onToggleItem(item.id, !item.checked)
   }
 
   function handleDeleteItem(id: string) {
-    socket.emit('delete-list-item', { room, id })
+    onDeleteItem(id)
   }
 
   const selectedList = lists.find(l => l.id === selectedId) ?? null

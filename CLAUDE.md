@@ -174,15 +174,16 @@ Definidas en `client/src/features/calendar/categories.ts` (`CATEGORIES`), cada u
 ## Estructura de componentes
 
 ```
-App
-├── RoomEntry            # home/create/join screen
-└── Dashboard            # main container: room CSS vars + lists/listItems/notes state, mobile hamburger menu
-    ├── RoomSettings     # color modal con presets + preview (emits update-room-style)
-    ├── Calendar         # calendar module
-    │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por categoría
-    │   └── EventModal   # create/edit/delete evento — categorías, recurrencia, hora opcional
-    ├── Lists            # lists module (sidebar + detail panel)
-    └── Notes            # notes module (sidebar + editor panel, auto-save 600ms)
+SocketProvider           # context de estado de conexión
+└── App
+    ├── RoomEntry        # home/create/join screen
+    └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost + navegación
+        ├── RoomSettings # color modal con presets + preview (emits update-room-style, subscribe-push)
+        ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props
+        │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por categoría
+        │   └── EventModal   # create/edit/delete evento — categorías, recurrencia, hora opcional
+        ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props
+        └── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props
 ```
 
 - `Calendar`, `Lists` y `Notes` son responsive: por debajo del breakpoint móvil (`useIsMobile`, 640px) muestran un solo panel a la vez (toggle sidebar ↔ detalle/calendario) en vez del layout de dos columnas de escritorio
@@ -242,7 +243,8 @@ interface Note {
 - Texto de UI para el usuario en español
 - TypeScript en el cliente, JavaScript ESM en el servidor
 - Contraseñas hasheadas con `crypto.scryptSync` (Node built-in, sin dependencias extra)
-- `socket.once` + cleanup manual para evitar listeners huérfanos en flujos de autenticación
+- `socket.once` + cleanup manual para evitar listeners huérfanos en flujos de autenticación (`RoomEntry`); los hooks por dominio usan `socket.on` + cleanup en `useEffect`
+- La instancia del socket vive en `client/src/socket/` (URL de `VITE_SOCKET_URL`, fallback `http://localhost:3001`)
 - Iconos como componentes SVG inline (sin librería de iconos externa)
 
 ## Estructura de archivos (client/src)
@@ -250,11 +252,16 @@ interface Note {
 ```
 features/
   auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css
-  dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, categories.ts
-  lists/        Lists + lists.css
-  settings/     RoomSettings + room-settings.css
-  notes/        Notes + notes.css
+  dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave)
+  calendar/     Calendar + calendar.css, EventModal, EventsPanel, categories.ts, useEvents
+  lists/        Lists + lists.css, useLists
+  settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
+  notes/        Notes + notes.css, useNotes
+socket/
+  client.ts             el io() singleton + rememberRoom/forgetRoom + re-join al reconectar
+  SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
+  useConnection.ts      hook → estado de conexión (costura para la Tarea C)
+  connection-context.ts / index.ts (barrel)
 shared/
   modal.css     estilos base del modal (usado por EventModal y RoomSettings)
 hooks/
@@ -262,6 +269,15 @@ hooks/
 push.ts         helpers de suscripción a Web Push (subscribeToPush, getCurrentSubscription)
 index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo global)
 ```
+
+- **Hooks por dominio** (`useEvents`, `useLists`, `useNotes`, `useRoomStyle`): cada
+  uno posee su `useState` (sembrado con los `initial*` de `access-granted`),
+  registra sus `socket.on(...)` + cleanup, se auto-refresca desde `access-granted`
+  en reconexión, y expone acciones tipadas que envuelven `socket.emit`. Los
+  componentes de módulo (`Calendar`, `Lists`, `Notes`) reciben datos + callbacks
+  por props y **no importan `socket` ni reciben `room`**.
+- `Dashboard` es composición pura (~130 líneas): monta los 4 hooks + navegación.
+- `<App>` va envuelto en `<SocketProvider>` (en `main.tsx`).
 
 ## Estructura de archivos (server)
 

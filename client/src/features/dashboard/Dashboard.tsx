@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import './dashboard.css'
-import { socket, forgetRoom } from '../../socket'
+import { forgetRoom } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import ModuleGrid from './ModuleGrid'
 import type { ModuleId } from './ModuleGrid'
@@ -8,6 +8,11 @@ import Calendar from '../calendar/Calendar'
 import Lists from '../lists/Lists'
 import Notes from '../notes/Notes'
 import RoomSettings from '../settings/RoomSettings'
+import { useRoomStyle } from '../settings/useRoomStyle'
+import { useEvents } from '../calendar/useEvents'
+import { useLists } from '../lists/useLists'
+import { useNotes } from '../notes/useNotes'
+import { useRoomLost } from './useRoomLost'
 
 interface Props {
   room: Room
@@ -33,160 +38,15 @@ const IconSettings = () => (
   </svg>
 )
 
-function isColorDark(hex: string | null): boolean {
-  if (!hex || hex.length < 7) return false
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return (r * 299 + g * 587 + b * 114) / 1000 < 128
-}
-
 export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, onLeave, onUpdateRoom }: Props) {
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
-  const [colors, setColors] = useState({
-    primary_color: room.primary_color,
-    background_color: room.background_color,
-    text_color: room.text_color,
-    sidebar_color: room.sidebar_color,
-  })
-  const [events, setEvents] = useState<Event[]>(initialEvents)
-  const [lists, setLists] = useState<List[]>(initialLists)
-  const [listItems, setListItems] = useState<ListItem[]>(initialListItems)
-  const [notes, setNotes] = useState<Note[]>(initialNotes)
 
-  useEffect(() => {
-    function onStyleUpdated(updatedRoom: Room) {
-      setColors({
-        primary_color: updatedRoom.primary_color,
-        background_color: updatedRoom.background_color,
-        text_color: updatedRoom.text_color,
-        sidebar_color: updatedRoom.sidebar_color,
-      })
-      onUpdateRoom(updatedRoom)
-    }
-    socket.on('style-updated', onStyleUpdated)
-    return () => { socket.off('style-updated', onStyleUpdated) }
-  }, [onUpdateRoom])
-
-  useEffect(() => {
-    function onCreated(e: Event) { setEvents(prev => [...prev, e]) }
-    function onUpdated(e: Event) { setEvents(prev => prev.map(ev => ev.id === e.id ? e : ev)) }
-    function onDeleted(id: string) { setEvents(prev => prev.filter(ev => ev.id !== id)) }
-    function onBatchCreated(batch: Event[]) { setEvents(prev => [...prev, ...batch]) }
-    function onSeriesUpdated({ events: updated }: { events: Event[] }) {
-      setEvents(prev => prev.map(e => updated.find(u => u.id === e.id) ?? e))
-    }
-    function onSeriesDeleted({ recurrence_id }: { recurrence_id: string }) {
-      setEvents(prev => prev.filter(e => e.recurrence_id !== recurrence_id))
-    }
-
-    socket.on('event-created', onCreated)
-    socket.on('event-updated', onUpdated)
-    socket.on('event-deleted', onDeleted)
-    socket.on('events-created', onBatchCreated)
-    socket.on('series-updated', onSeriesUpdated)
-    socket.on('series-deleted', onSeriesDeleted)
-    return () => {
-      socket.off('event-created', onCreated)
-      socket.off('event-updated', onUpdated)
-      socket.off('event-deleted', onDeleted)
-      socket.off('events-created', onBatchCreated)
-      socket.off('series-updated', onSeriesUpdated)
-      socket.off('series-deleted', onSeriesDeleted)
-    }
-  }, [])
-
-  // Re-sincronización tras reconexión: socket.ts re-emite join-room al
-  // reconectar (ver rememberRoom/forgetRoom). Este listener persistente
-  // captura esa respuesta (el access-granted inicial ya lo consumió
-  // RoomEntry con socket.once) y refresca todo con la foto fresca del
-  // servidor. Si la sala ya no existe (se limpió mientras el cliente
-  // estaba desconectado), volvemos a la pantalla de entrada.
-  useEffect(() => {
-    function onGranted(payload: { room: Room; events: Event[]; lists: List[]; listItems: ListItem[]; notes: Note[] }) {
-      setColors({
-        primary_color: payload.room.primary_color,
-        background_color: payload.room.background_color,
-        text_color: payload.room.text_color,
-        sidebar_color: payload.room.sidebar_color,
-      })
-      onUpdateRoom(payload.room)
-      setEvents(payload.events)
-      setLists(payload.lists)
-      setListItems(payload.listItems)
-      setNotes(payload.notes)
-    }
-    function onDenied() {
-      forgetRoom()
-      onLeave('La sala ya no está disponible. Puede que se haya eliminado por inactividad o que la contraseña haya cambiado.')
-    }
-    socket.on('access-granted', onGranted)
-    socket.on('access-denied', onDenied)
-    return () => {
-      socket.off('access-granted', onGranted)
-      socket.off('access-denied', onDenied)
-    }
-  }, [onUpdateRoom, onLeave])
-
-  useEffect(() => {
-    function onListCreated(list: List) { setLists(prev => [...prev, list]) }
-    function onListDeleted(id: string) { setLists(prev => prev.filter(l => l.id !== id)) }
-    function onItemCreated(item: ListItem) { setListItems(prev => [...prev, item]) }
-    function onItemUpdated(item: ListItem) { setListItems(prev => prev.map(i => i.id === item.id ? item : i)) }
-    function onItemDeleted(id: string) { setListItems(prev => prev.filter(i => i.id !== id)) }
-
-    socket.on('list-created', onListCreated)
-    socket.on('list-deleted', onListDeleted)
-    socket.on('list-item-created', onItemCreated)
-    socket.on('list-item-updated', onItemUpdated)
-    socket.on('list-item-deleted', onItemDeleted)
-    return () => {
-      socket.off('list-created', onListCreated)
-      socket.off('list-deleted', onListDeleted)
-      socket.off('list-item-created', onItemCreated)
-      socket.off('list-item-updated', onItemUpdated)
-      socket.off('list-item-deleted', onItemDeleted)
-    }
-  }, [])
-
-  useEffect(() => {
-    function onNoteCreated(note: Note) { setNotes(prev => [note, ...prev]) }
-    function onNoteUpdated(note: Note) { setNotes(prev => prev.map(n => n.id === note.id ? note : n)) }
-    function onNoteDeleted(id: string) { setNotes(prev => prev.filter(n => n.id !== id)) }
-
-    socket.on('note-created', onNoteCreated)
-    socket.on('note-updated', onNoteUpdated)
-    socket.on('note-deleted', onNoteDeleted)
-    return () => {
-      socket.off('note-created', onNoteCreated)
-      socket.off('note-updated', onNoteUpdated)
-      socket.off('note-deleted', onNoteDeleted)
-    }
-  }, [])
-
-  const dark = isColorDark(colors.background_color)
-  const cssVars = {
-    '--primary': colors.primary_color ?? '#0071E3',
-    '--bg': colors.background_color ?? '#F5F5F7',
-    '--text': colors.text_color ?? '#1D1D1F',
-    '--surface': colors.sidebar_color ?? '#FFFFFF',
-    '--border': dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-    '--surface-2': dark ? 'rgba(255,255,255,0.06)' : '#F2F2F7',
-    '--muted': dark ? '#98989D' : '#6E6E73',
-  } as React.CSSProperties
-
-  const roomWithColors: Room = {
-    ...room,
-    primary_color: colors.primary_color,
-    background_color: colors.background_color,
-    text_color: colors.text_color,
-    sidebar_color: colors.sidebar_color,
-  }
-
-  function openSettings() {
-    setShowSettings(true)
-  }
+  const { colors, cssVars, roomWithColors } = useRoomStyle(room, onUpdateRoom)
+  const cal = useEvents(room.name, initialEvents)
+  const lists = useLists(room.name, initialLists, initialListItems)
+  const notes = useNotes(room.name, initialNotes)
+  useRoomLost(onLeave)
 
   function leave() {
     forgetRoom()
@@ -210,7 +70,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         </div>
 
         <div className="dashboard-header-right">
-          <button className="btn-ghost btn-icon" onClick={openSettings} aria-label="Ajustes">
+          <button className="btn-ghost btn-icon" onClick={() => setShowSettings(true)} aria-label="Ajustes">
             <IconSettings />
           </button>
         </div>
@@ -220,16 +80,31 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         {activeModule === null && <ModuleGrid onSelect={setActiveModule} />}
         {activeModule === 'calendar' && (
           <Calendar
-            room={room.name}
-            events={events}
+            events={cal.events}
             primaryColor={colors.primary_color ?? '#0071E3'}
+            onCreateEvent={cal.createEvent}
+            onUpdateEvent={cal.updateEvent}
+            onDeleteEvent={cal.deleteEvent}
           />
         )}
         {activeModule === 'lists' && (
-          <Lists room={room.name} lists={lists} listItems={listItems} />
+          <Lists
+            lists={lists.lists}
+            listItems={lists.listItems}
+            onCreateList={lists.createList}
+            onDeleteList={lists.deleteList}
+            onCreateItem={lists.createItem}
+            onToggleItem={lists.toggleItem}
+            onDeleteItem={lists.deleteItem}
+          />
         )}
         {activeModule === 'notes' && (
-          <Notes room={room.name} notes={notes} />
+          <Notes
+            notes={notes.notes}
+            onCreateNote={notes.createNote}
+            onUpdateNote={notes.updateNote}
+            onDeleteNote={notes.deleteNote}
+          />
         )}
       </main>
 

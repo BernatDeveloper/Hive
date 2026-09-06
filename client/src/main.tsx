@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { SocketProvider } from './socket'
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -11,6 +12,8 @@ if ('serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <SocketProvider>
+      <App />
+    </SocketProvider>
   </StrictMode>,
 )

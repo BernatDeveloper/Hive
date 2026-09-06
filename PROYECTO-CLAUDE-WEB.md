@@ -146,16 +146,22 @@ Detalle completo en `NOTIFICACIONES.md`.
 ## Estructura de componentes
 
 ```
-App
-├── RoomEntry            # home / create / join
-└── Dashboard            # contenedor: CSS vars de sala + estado de lists/listItems/notes, menú hamburguesa móvil
-    ├── RoomSettings     # modal de colores con presets claro/oscuro + preview (emits update-room-style)
-    ├── Calendar
-    │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por categoría
-    │   └── EventModal   # crear/editar/borrar evento — categorías, recurrencia, hora opcional, recordatorio
-    ├── Lists
-    └── Notes            # editor con auto-save 600ms
+SocketProvider           # context de estado de conexión ('connecting'|'connected'|'disconnected')
+└── App
+    ├── RoomEntry        # home / create / join
+    └── Dashboard        # composición: monta useRoomStyle/useEvents/useLists/useNotes/useRoomLost
+        ├── RoomSettings # modal de colores con presets claro/oscuro + preview (emits update-room-style)
+        ├── Calendar     # recibe events + onCreate/Update/DeleteEvent por props (no toca socket)
+        │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por categoría
+        │   └── EventModal   # crear/editar/borrar evento — categorías, recurrencia, hora opcional, recordatorio
+        ├── Lists        # datos + callbacks por props
+        └── Notes        # editor con auto-save 600ms — datos + callbacks por props
 ```
+
+Cada hook de dominio (`useEvents`, `useLists`, `useNotes`, `useRoomStyle`) posee su
+`useState` sembrado con los `initial*`, registra sus `socket.on(...)` con cleanup,
+se auto-refresca desde `access-granted` en reconexión, y expone acciones que
+envuelven `socket.emit`.
 
 `Calendar`, `Lists` y `Notes` son responsive: por debajo de 640px (`useIsMobile`)
 muestran un solo panel a la vez en vez del layout de dos columnas.
@@ -215,10 +221,13 @@ features/
   lists/        Lists + lists.css
   settings/     RoomSettings + room-settings.css
   notes/        Notes + notes.css
+  cada feature incluye su hook de dominio: useEvents, useLists, useNotes, useRoomStyle,
+  useRoomLost — poseen el estado, los socket.on con cleanup, y las acciones (socket.emit)
+socket/         client.ts (io singleton + rememberRoom/forgetRoom + re-join), SocketProvider
+                (context de estado de conexión), useConnection, index.ts (barrel)
 shared/         modal.css (base de modal, usado por EventModal y RoomSettings)
 hooks/          useIsMobile (breakpoint 640px)
 push.ts         helpers Web Push (subscribeToPush, getCurrentSubscription)
-socket.ts       instancia y URL del socket
 types.ts        tipos compartidos
 index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo global)
 
