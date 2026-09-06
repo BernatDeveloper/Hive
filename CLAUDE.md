@@ -127,15 +127,16 @@ Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficher
 | `update-room-style` | `{ name, styles }` | `style-updated` (room broadcast) |
 | `create-event` | `{ room, event }` | `event-created` si es evento único; `events-created` (array) si `event.recurrence_rule` genera una serie |
 | `update-event` | `{ room, event, scope? }` | evento único → `event-updated`. Instancia de serie según `scope`: `single` → `event-updated` (desengancha la instancia); `future` → `series-updated` (`{ events }`, subconjunto con `recurrence_id` nuevo); `all` (defecto) → `series-updated` |
-| `delete-event` | `{ room, id, scope? }` | evento único → `event-deleted`. Instancia de serie: `single` → `event-deleted`; `future` → `events-deleted` (`{ ids }`); `all` (defecto) → `series-deleted` (`{ recurrence_id }`) |
+| `delete-event` | `{ room, id, scope? }` | evento único → `event-deleted`. Instancia de serie: `single` → `event-deleted`; `future` → `events-deleted` (`{ ids }`); `all` (defecto) → `series-deleted` (`{ recurrence_id }`). Ack `{ undoToken, label }` (ventana de deshacer) |
 | `create-note` | `{ room, title }` | `note-created` (room broadcast) |
 | `update-note` | `{ room, note: { id, title, body, updated_at } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
-| `delete-note` | `{ room, id }` | `note-deleted` (room broadcast) |
+| `delete-note` | `{ room, id }` | `note-deleted` (broadcast) + ack `{ undoToken, label }` |
 | `create-list` | `{ room, title }` | `list-created` (room broadcast) |
-| `delete-list` | `{ room, id }` | `list-deleted` (room broadcast) |
+| `delete-list` | `{ room, id }` | `list-deleted` (broadcast) + ack `{ undoToken, label }` (borra en cascada los ítems; el undo los restaura) |
 | `create-list-item` | `{ room, listId, text }` | `list-item-created` (room broadcast) |
 | `toggle-list-item` | `{ room, id, checked }` | `list-item-updated` (room broadcast) |
 | `delete-list-item` | `{ room, id }` | `list-item-deleted` (room broadcast) |
+| `undo-delete` | `{ room, token }` | re-inserta lo borrado y difunde su `*-created`; ack `{ ok, expired? }` |
 | `get-presence` | `—` | `presence` (`{ count }`) al emisor |
 | `subscribe-push` / `unsubscribe-push` | `{ room, subscription }` / `{ endpoint }` | `push-subscribed` / `push-unsubscribed` / `push-error` |
 
@@ -192,6 +193,7 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 8. Presencia: el header del Dashboard muestra un punto + número si hay más de un dispositivo conectado a la sala
 9. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
 10. Calendario → botón ⬇ en el panel de "Próximos": descarga un `.ics` con todos los eventos (`features/calendar/ics.ts`, generado en cliente)
+11. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
 
 ## Estructura de componentes
 
@@ -292,7 +294,7 @@ interface Note {
 ```
 features/
   auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística)
-  dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave)
+  dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
   calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto)
   lists/        Lists + lists.css, useLists
   settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
@@ -348,16 +350,18 @@ services/
   recurrence.js       generateRecurrenceInstances (+ helpers de fecha) — puro, sin DB
   reminders.js        sendPushToRoom, scheduler de recordatorios (setInterval 60s)
   cleanup.js          cleanInactiveRooms + startCleanupScheduler (setInterval 24h)
+  undo.js             stash/pop — tombstones de borrados en memoria (ventana 12s)
 http/
   app.js              createApp() — express + cors + json + health
   io.js               createIo(httpServer) — new Server con cors de config/cors.js
   health.js           GET /health
 sockets/
-  index.js            registerSocketHandlers(io) — io.on('connection') registra los 6 grupos
+  index.js            registerSocketHandlers(io) — io.on('connection') registra los 7 grupos
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
   handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; reenvían el ack de socket.io al handler; safeAuthedOn además exige isAuthedFor(payload.room)
-  validate.js         MAX (longitudes), str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
+  validate.js         MAX (longitudes) + MIN_PASSWORD, str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
   presence.js         `presence`/`get-presence` (nº de sockets por sala vía io.sockets.adapter.rooms) + handler `disconnecting`
+  undo.js             `undo-delete` → restaura desde la ventana de `services/undo.js`
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 test/
   setup.js            --import de `pnpm test`: env de prueba + DB_PATH temporal por proceso (se borra al salir)
@@ -366,6 +370,7 @@ test/
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
   presence.test.js    presence sube al entrar, baja al salir, get-presence bajo demanda
+  undo.test.js        undo de evento/serie/lista(+ítems)/nota; token caducado; undo de otra sala rechazado
 services/recurrence.test.js   unit: generateRecurrenceInstances (todas las reglas/horizontes, propagación, spans, hora)
 ```
 

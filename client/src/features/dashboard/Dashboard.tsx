@@ -13,6 +13,8 @@ import { useEvents } from '../calendar/useEvents'
 import { useLists } from '../lists/useLists'
 import { useNotes } from '../notes/useNotes'
 import { useRoomLost } from './useRoomLost'
+import { useUndo } from './useUndo'
+import UndoToast from './UndoToast'
 
 interface Props {
   room: Room
@@ -47,6 +49,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const cal = useEvents(room.name, initialEvents)
   const lists = useLists(room.name, initialLists, initialListItems)
   const notes = useNotes(room.name, initialNotes)
+  const undo = useUndo(room.name)
   useRoomLost(onLeave)
 
   function leave() {
@@ -93,7 +96,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             paletteColors={eventColors}
             onCreateEvent={cal.createEvent}
             onUpdateEvent={cal.updateEvent}
-            onDeleteEvent={cal.deleteEvent}
+            onDeleteEvent={(id, scope) => { cal.deleteEvent(id, scope).then(undo.offer) }}
           />
         )}
         {activeModule === 'lists' && (
@@ -101,10 +104,10 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             lists={lists.lists}
             listItems={lists.listItems}
             onCreateList={lists.createList}
-            onDeleteList={lists.deleteList}
+            onDeleteList={(id) => { lists.deleteList(id).then(undo.offer) }}
             onCreateItem={lists.createItem}
             onToggleItem={lists.toggleItem}
-            onDeleteItem={lists.deleteItem}
+            onDeleteItem={(id) => { lists.deleteItem(id).then(undo.offer) }}
           />
         )}
         {activeModule === 'notes' && (
@@ -112,10 +115,14 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             notes={notes.notes}
             onCreateNote={notes.createNote}
             onUpdateNote={notes.updateNote}
-            onDeleteNote={notes.deleteNote}
+            onDeleteNote={(id) => { notes.deleteNote(id).then(undo.offer) }}
           />
         )}
       </main>
+
+      {undo.toast && (
+        <UndoToast label={undo.toast.label} onUndo={undo.undo} onDismiss={undo.dismiss} />
+      )}
 
       {showSettings && (
         <RoomSettings room={roomWithColors} onClose={() => setShowSettings(false)} onLeave={leave} />

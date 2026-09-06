@@ -123,20 +123,35 @@ export function updateEventDetach(event) {
   return db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
 }
 
+// Los delete* devuelven las filas borradas (para la ventana de "deshacer").
 export function deleteEvent(id) {
+  const row = db.prepare('SELECT * FROM event WHERE id = ?').get(id)
   db.prepare('DELETE FROM event WHERE id = ?').run(id)
+  return row ? [row] : []
 }
 
 export function deleteSeries(recurrenceId) {
+  const rows = db.prepare('SELECT * FROM event WHERE recurrence_id = ?').all(recurrenceId)
   db.prepare('DELETE FROM event WHERE recurrence_id = ?').run(recurrenceId)
+  return rows
 }
 
 // scope 'future' al borrar: quita las instancias desde `fromStart` (incl.).
 export function deleteSeriesFuture(recurrenceId, fromStart) {
-  const ids = db.prepare('SELECT id FROM event WHERE recurrence_id = ? AND start >= ?')
-    .all(recurrenceId, fromStart).map(r => r.id)
+  const rows = db.prepare('SELECT * FROM event WHERE recurrence_id = ? AND start >= ?').all(recurrenceId, fromStart)
   db.prepare('DELETE FROM event WHERE recurrence_id = ? AND start >= ?').run(recurrenceId, fromStart)
-  return ids
+  return rows
+}
+
+const EVENT_COLS = 'id, room, title, start, end, description, category, color, recurrence_rule, recurrence_id, reminder_offset, reminder_sent, updated_at'
+
+export function restoreEvents(rows) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO event (${EVENT_COLS})
+    VALUES (@id, @room, @title, @start, @end, @description, @category, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @reminder_sent, @updated_at)
+  `)
+  db.transaction(rs => { for (const r of rs) insert.run(r) })(rows)
+  return rows
 }
 
 // --- Recordatorios (flag reminder_sent sobre la tabla event) ---

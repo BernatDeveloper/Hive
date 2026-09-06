@@ -2,6 +2,7 @@ import {
   createList, deleteList,
   createListItem, toggleListItem, deleteListItem,
 } from '../db/index.js'
+import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
 import { MAX, str } from './validate.js'
@@ -14,10 +15,12 @@ export function registerListHandlers(io, socket) {
     broadcast(io, room, 'list-created', list)
   })
 
-  safeAuthedOn(socket, 'delete-list', 'list-error', { message: 'No se pudo eliminar la lista' }, ({ room, id }) => {
+  safeAuthedOn(socket, 'delete-list', 'list-error', { message: 'No se pudo eliminar la lista' }, ({ room, id }, ack) => {
     if (!str(id, MAX.id)) return
-    deleteList(id)
+    const { list, items } = deleteList(id)
+    if (!list) return
     broadcast(io, room, 'list-deleted', id)
+    ack?.({ undoToken: stash(room, { kind: 'list', list, items }), label: `Lista «${list.title}»` })
   })
 
   safeAuthedOn(socket, 'create-list-item', 'list-error', { message: 'No se pudo añadir el ítem' }, ({ room, listId, text }) => {
@@ -34,9 +37,11 @@ export function registerListHandlers(io, socket) {
     broadcast(io, room, 'list-item-updated', item)
   })
 
-  safeAuthedOn(socket, 'delete-list-item', 'list-error', { message: 'No se pudo eliminar el ítem' }, ({ room, id }) => {
+  safeAuthedOn(socket, 'delete-list-item', 'list-error', { message: 'No se pudo eliminar el ítem' }, ({ room, id }, ack) => {
     if (!str(id, MAX.id)) return
-    deleteListItem(id)
+    const item = deleteListItem(id)
+    if (!item) return
     broadcast(io, room, 'list-item-deleted', id)
+    ack?.({ undoToken: stash(room, { kind: 'list-item', item }), label: `«${item.text}»` })
   })
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { socket } from '../../socket'
-import type { Note } from '../../types'
+import type { Note, UndoOffer } from '../../types'
 
 export interface UpdateNoteResult {
   status: 'ok' | 'conflict' | 'not-found' | 'invalid' | 'timeout'
@@ -13,7 +13,7 @@ export function useNotes(room: string, initial: Note[]) {
   const [notes, setNotes] = useState<Note[]>(initial)
 
   useEffect(() => {
-    function onNoteCreated(note: Note) { setNotes(prev => [note, ...prev]) }
+    function onNoteCreated(note: Note) { setNotes(prev => prev.some(n => n.id === note.id) ? prev : [note, ...prev]) }
     function onNoteUpdated(note: Note) { setNotes(prev => prev.map(n => n.id === note.id ? note : n)) }
     function onNoteDeleted(id: string) { setNotes(prev => prev.filter(n => n.id !== id)) }
     function onGranted(payload: { notes: Note[] }) { setNotes(payload.notes) }
@@ -43,6 +43,9 @@ export function useNotes(room: string, initial: Note[]) {
           (err: unknown, res: UpdateNoteResult) => resolve(err ? { status: 'timeout' } : res),
         )
       }),
-    deleteNote: (id: string) => socket.emit('delete-note', { room, id }),
+    deleteNote: (id: string): Promise<UndoOffer> =>
+      new Promise(resolve => {
+        socket.timeout(5000).emit('delete-note', { room, id }, (_e: unknown, res: UndoOffer) => resolve(res ?? {}))
+      }),
   }
 }

@@ -52,6 +52,47 @@
   background: var(--success, #34C759);
 }
 
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.7rem 0.7rem 0.7rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.85rem;
+  box-shadow: var(--shadow-lg);
+}
+.undo-toast-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-toast-action {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+.undo-toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--bg);
+  opacity: 0.6;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3rem;
+}
+.undo-toast-close:hover { opacity: 1; }
+
 .dashboard-room-name {
   font-weight: 600;
   font-size: 0.95rem;

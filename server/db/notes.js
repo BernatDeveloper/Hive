@@ -39,5 +39,13 @@ export function updateNote(note) {
 }
 
 export function deleteNote(id) {
+  const note = db.prepare('SELECT * FROM note WHERE id = ?').get(id)
   db.prepare('DELETE FROM note WHERE id = ?').run(id)
+  return note
+}
+
+export function restoreNote(note) {
+  db.prepare('INSERT OR IGNORE INTO note (id, room, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(note.id, note.room, note.title, note.body, note.created_at, note.updated_at)
+  return note
 }

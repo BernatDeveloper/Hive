@@ -6,9 +6,15 @@ import {
   resetReminderSent,
 } from '../db/index.js'
 import { generateRecurrenceInstances } from '../services/recurrence.js'
+import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
 import { str, isValidEventInput, MAX } from './validate.js'
+
+function eventLabel(rows) {
+  const title = rows[0]?.title ?? 'Evento'
+  return rows.length > 1 ? `«${title}» y ${rows.length - 1} más` : `«${title}»`
+}
 
 const SCOPES = new Set(['single', 'future', 'all'])
 // 'all' por defecto = comportamiento anterior (clientes que no mandan scope).
@@ -62,27 +68,26 @@ export function registerEventHandlers(io, socket) {
     }
   })
 
-  safeAuthedOn(socket, 'delete-event', 'event-error', { message: 'No se pudo eliminar el evento' }, ({ room, id, scope }) => {
+  safeAuthedOn(socket, 'delete-event', 'event-error', { message: 'No se pudo eliminar el evento' }, ({ room, id, scope }, ack) => {
     if (!str(id, MAX.id)) return
     const ev = getEventById(id)
     if (!ev) return
 
-    if (!ev.recurrence_id) {
-      deleteEvent(id)
+    let removed
+    const s = ev.recurrence_id ? scopeOf(scope) : 'single'
+    if (s === 'future') {
+      removed = deleteSeriesFuture(ev.recurrence_id, ev.start)
+      broadcast(io, room, 'events-deleted', { ids: removed.map(r => r.id) })
+    } else if (s === 'all' && ev.recurrence_id) {
+      removed = deleteSeries(ev.recurrence_id)
+      broadcast(io, room, 'series-deleted', { recurrence_id: ev.recurrence_id })
+    } else {
+      removed = deleteEvent(id)
       broadcast(io, room, 'event-deleted', id)
-      return
     }
 
-    const s = scopeOf(scope)
-    if (s === 'single') {
-      deleteEvent(id)
-      broadcast(io, room, 'event-deleted', id)
-    } else if (s === 'future') {
-      const ids = deleteSeriesFuture(ev.recurrence_id, ev.start)
-      broadcast(io, room, 'events-deleted', { ids })
-    } else {
-      deleteSeries(ev.recurrence_id)
-      broadcast(io, room, 'series-deleted', { recurrence_id: ev.recurrence_id })
+    if (removed.length > 0) {
+      ack?.({ undoToken: stash(room, { kind: 'events', rows: removed }), label: eventLabel(removed) })
     }
   })
 }

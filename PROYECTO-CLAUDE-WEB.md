@@ -92,6 +92,7 @@ datos, `list_item(list_id)`, `event(reminder_sent,start)`).
 | `update-event` | `{ room, event, scope? }` | único → `event-updated`. Serie según `scope`: `single` → `event-updated` (desengancha); `future` → `series-updated` (recurrence_id nuevo); `all` (defecto) → `series-updated` |
 | `delete-event` | `{ room, id, scope? }` | único → `event-deleted`. Serie: `single` → `event-deleted`; `future` → `events-deleted {ids}`; `all` → `series-deleted` |
 | `get-presence` | `—` | `presence {count}` (+ broadcast al entrar/salir cualquiera) |
+| `undo-delete` | `{ room, token }` | restaura lo borrado (ventana ~12s) y difunde su `*-created`; ack `{ ok }`. Los `delete-*` responden ack `{ undoToken, label }` |
 | `create-note` | `{ room, title }` | `note-created` (broadcast) |
 | `update-note` | `{ room, note: {id,title,body,updated_at} }` | **ack** `{ status:'ok'\|'conflict'\|'not-found', note? }`; en `ok` además `note-updated` (broadcast). Concurrencia optimista por `updated_at` |
 | `delete-note` | `{ room, id }` | `note-deleted` (broadcast) |
@@ -160,7 +161,7 @@ SocketProvider           # context de estado de conexión ('connecting'|'connect
 └── App
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home / create / join — auth con timeout de red de 8s (awaitAuthResponse)
-    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence (indicador en el header)
+    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence/useUndo (+ UndoToast, indicador de presencia en el header)
         ├── RoomSettings # colores de sala + paleta de colores de evento (emits update-room-style)
         ├── Calendar     # recibe events + paletteColors + onCreate/Update/DeleteEvent por props (no toca socket)
         │   ├── EventsPanel  # sidebar: próximos eventos por día, filtro por color
@@ -252,6 +253,7 @@ server/
   config/             env.js (valida VAPID_*, exit 1 si falta), webpush.js, cors.js
   lib/                logger.js (niveles, LOG_LEVEL), rateLimit.js (ventana deslizante)
   sockets/presence.js presence / get-presence (nº de sockets por sala)
+  sockets/undo.js + services/undo.js  ventana de "deshacer" borrados (~12s, en memoria)
   db/                 connection.js, schema.js, migrations.js, index.js (initDb + barrel),
                       rooms.js, events.js, lists.js, notes.js, push.js
   auth/password.js    hash + verify (scrypt async)

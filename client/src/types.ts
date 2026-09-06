@@ -3,6 +3,12 @@ export type RecurrenceRule = 'none' | 'daily' | 'weekly' | 'monthly' | 'monthly-
 // Alcance de una edición/borrado sobre una instancia de serie recurrente.
 export type RecurrenceScope = 'single' | 'future' | 'all'
 
+// Respuesta (ack) de un `delete-*`: si trae `undoToken`, hay ventana de deshacer.
+export interface UndoOffer {
+  undoToken?: string
+  label?: string
+}
+
 export interface Event {
   id: string
   room: string

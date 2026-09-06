@@ -1,4 +1,5 @@
 import { createNote, updateNote, deleteNote } from '../db/index.js'
+import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
 import { MAX, str, isObject } from './validate.js'
@@ -32,9 +33,11 @@ export function registerNoteHandlers(io, socket) {
     }
   })
 
-  safeAuthedOn(socket, 'delete-note', 'note-error', { message: 'No se pudo eliminar la nota' }, ({ room, id }) => {
+  safeAuthedOn(socket, 'delete-note', 'note-error', { message: 'No se pudo eliminar la nota' }, ({ room, id }, ack) => {
     if (!str(id, MAX.id)) return
-    deleteNote(id)
+    const note = deleteNote(id)
+    if (!note) return
     broadcast(io, room, 'note-deleted', id)
+    ack?.({ undoToken: stash(room, { kind: 'note', note }), label: `Nota «${note.title || 'Sin título'}»` })
   })
 }

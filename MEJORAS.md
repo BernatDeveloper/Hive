@@ -251,7 +251,7 @@ el mismo criterio.
 
 ---
 
-## FASE 5 — Experiencia de producto — 3/4 hechas (undo pendiente)
+## FASE 5 — Experiencia de producto — COMPLETA
 
 > - **Series "este y los siguientes":** `update-event`/`delete-event` llevan `scope`
 >   (`single`/`future`/`all`, defecto `all` = compat). `single` desengancha la
@@ -269,8 +269,11 @@ el mismo criterio.
 >   `get-presence` para pedirlo bajo demanda (el broadcast tras `access-granted`
 >   llega antes de montar el listener). `usePresence()` + indicador en el header del
 >   Dashboard (solo si > 1). Tests: `test/presence.test.js`.
-> - **Undo para borrados:** pendiente (follow-up — es el más transversal, toca
->   events/lists/notes).
+> - **Undo para borrados:** hecho — `services/undo.js` guarda una copia de lo
+>   borrado (ventana 12s); los `delete-*` responden por ack `{ undoToken, label }`;
+>   `undo-delete` re-inserta y difunde los `*-created`. Cliente: `useUndo` +
+>   `UndoToast` en el Dashboard (evento/serie/lista+ítems/nota/ítem). Tests
+>   `test/undo.test.js` (6) + e2e.
 >
 > `pnpm test` → 31. e2e headless: 2 pestañas con scopes de serie + presencia 1↔2;
 > prompt de SW con despliegue simulado.
