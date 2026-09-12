@@ -32,24 +32,33 @@
 }
 
 .dashboard-presence {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 100px;
-  background: var(--surface-2);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--muted);
   cursor: default;
   user-select: none;
 }
 
-.dashboard-presence-dot {
-  width: 6px;
-  height: 6px;
+.dashboard-presence-avatar {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: var(--success, #34C759);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: 2px solid var(--surface);
+  margin-left: -8px;
+  flex-shrink: 0;
+}
+.dashboard-presence-avatar:first-child { margin-left: 0; }
+
+.dashboard-presence-more {
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .undo-toast {

@@ -4,6 +4,7 @@ import { nextTimestamp } from '../lib/time.js'
 
 const VALID_REMINDER_OFFSETS = new Set([5, 15, 30, 60, 120, 1440, 2880])
 const HEX = /^#[0-9a-fA-F]{6}$/
+const MAX_EDITOR_NAME = 40
 
 function sanitizeReminderOffset(offset) {
   return VALID_REMINDER_OFFSETS.has(offset) ? offset : null
@@ -12,6 +13,13 @@ function sanitizeReminderOffset(offset) {
 // Color de evento: hex #rrggbb o null (null = hereda el primary_color de la sala).
 function sanitizeColor(color) {
   return typeof color === 'string' && HEX.test(color) ? color.toLowerCase() : null
+}
+
+// Identidad de quien crea/edita (Fase 9 — informativa, spoofeable): nombre
+// recortado o null si no viene; color hex o null (mismo formato que el color
+// de evento, sin relación con él).
+function sanitizeEditorName(name) {
+  return typeof name === 'string' && name.trim().length > 0 ? name.trim().slice(0, MAX_EDITOR_NAME) : null
 }
 
 export function getEvents(room) {
@@ -30,28 +38,32 @@ export function createEvent(room, event) {
     ...event,
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+    last_editor_name: sanitizeEditorName(event.editor_name),
+    last_editor_color: sanitizeColor(event.editor_color),
     // ISO con "T"/"Z" explícito (no datetime('now'), que da "YYYY-MM-DD HH:MM:SS"
     // sin zona): updateEvent() compara este valor como testigo de versión, y los
     // dos formatos no comparan bien entre sí.
     updated_at: new Date().toISOString(),
   }
   db.prepare(`
-    INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @updated_at)
+    INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at, last_editor_name, last_editor_color)
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @updated_at, @last_editor_name, @last_editor_color)
   `).run(newEvent)
   return db.prepare('SELECT * FROM event WHERE id = ?').get(id)
 }
 
 export function createEventsBatch(room, instances) {
   const insert = db.prepare(`
-    INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @updated_at)
+    INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at, last_editor_name, last_editor_color)
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @updated_at, @last_editor_name, @last_editor_color)
   `)
   const withRoom = instances.map(ev => ({
     ...ev,
     room,
     color: sanitizeColor(ev.color),
     reminder_offset: sanitizeReminderOffset(ev.reminder_offset),
+    last_editor_name: sanitizeEditorName(ev.editor_name),
+    last_editor_color: sanitizeColor(ev.editor_color),
     updated_at: new Date().toISOString(),
   }))
   db.transaction(evs => { for (const ev of evs) insert.run(ev) })(withRoom)
@@ -77,13 +89,16 @@ export function updateEvent(event) {
     ...event,
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+    last_editor_name: sanitizeEditorName(event.editor_name),
+    last_editor_color: sanitizeColor(event.editor_color),
     updated_at: nextTimestamp(current.updated_at),
   }
   db.prepare(`
     UPDATE event
     SET title = @title, start = @start, end = @end,
         description = @description, color = @color,
-        reminder_offset = @reminder_offset, updated_at = @updated_at
+        reminder_offset = @reminder_offset, updated_at = @updated_at,
+        last_editor_name = @last_editor_name, last_editor_color = @last_editor_color
     WHERE id = @id
   `).run(safe)
   return { status: 'ok', event: db.prepare('SELECT * FROM event WHERE id = ?').get(event.id) }
@@ -94,6 +109,8 @@ function seriesFields(event) {
     ...event,
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+    last_editor_name: sanitizeEditorName(event.editor_name),
+    last_editor_color: sanitizeColor(event.editor_color),
   }
 }
 
@@ -102,7 +119,8 @@ export function updateSeries(event) {
   db.prepare(`
     UPDATE event
     SET title = @title, description = @description, color = @color,
-        reminder_offset = @reminder_offset, updated_at = datetime('now')
+        reminder_offset = @reminder_offset, updated_at = datetime('now'),
+        last_editor_name = @last_editor_name, last_editor_color = @last_editor_color
     WHERE recurrence_id = @recurrence_id
   `).run(seriesFields(event))
   return db.prepare('SELECT * FROM event WHERE recurrence_id = ?').all(event.recurrence_id)
@@ -115,7 +133,8 @@ export function updateSeriesFuture(event, recurrenceId, fromStart) {
   db.prepare(`
     UPDATE event
     SET title = @title, description = @description, color = @color,
-        reminder_offset = @reminder_offset, recurrence_id = @newRid, updated_at = datetime('now')
+        reminder_offset = @reminder_offset, recurrence_id = @newRid, updated_at = datetime('now'),
+        last_editor_name = @last_editor_name, last_editor_color = @last_editor_color
     WHERE recurrence_id = @recurrence_id AND start >= @fromStart
   `).run({ ...seriesFields(event), recurrence_id: recurrenceId, newRid, fromStart })
   return db.prepare('SELECT * FROM event WHERE recurrence_id = ?').all(newRid)
@@ -129,7 +148,8 @@ export function updateEventDetach(event) {
         description = @description, color = @color,
         reminder_offset = @reminder_offset,
         recurrence_id = NULL, recurrence_rule = NULL,
-        updated_at = datetime('now')
+        updated_at = datetime('now'),
+        last_editor_name = @last_editor_name, last_editor_color = @last_editor_color
     WHERE id = @id
   `).run(seriesFields(event))
   return db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
@@ -155,12 +175,12 @@ export function deleteSeriesFuture(recurrenceId, fromStart) {
   return rows
 }
 
-const EVENT_COLS = 'id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, reminder_sent, updated_at'
+const EVENT_COLS = 'id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, reminder_sent, updated_at, last_editor_name, last_editor_color'
 
 export function restoreEvents(rows) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO event (${EVENT_COLS})
-    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @reminder_sent, @updated_at)
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @reminder_sent, @updated_at, @last_editor_name, @last_editor_color)
   `)
   db.transaction(rs => { for (const r of rs) insert.run(r) })(rows)
   return rows

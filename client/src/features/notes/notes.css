@@ -168,6 +168,17 @@
   white-space: nowrap;
 }
 
+.notes-attribution {
+  margin: 0.6rem 1.5rem 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.notes-attribution strong { color: var(--text); font-weight: 600; }
+
+@media (max-width: 640px) {
+  .notes-attribution { margin: 0.6rem 1rem 0; }
+}
+
 .notes-conflict {
   display: flex;
   align-items: center;

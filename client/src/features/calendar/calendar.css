@@ -224,6 +224,14 @@
 
 .events-panel-recur { opacity: 0.7; font-size: 0.6rem; }
 
+/* ── EventModal: atribución ("Editado por…") ── */
+.event-attribution {
+  margin: -0.5rem 0 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.event-attribution strong { color: var(--text); font-weight: 600; }
+
 /* ── EventModal: color swatches ── */
 .event-colors {
   display: flex;

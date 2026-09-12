@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './dashboard.css'
 import { forgetRoom, usePresence } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
+import { readableTextColor } from '../../shared/color'
 import ModuleGrid from './ModuleGrid'
 import type { ModuleId } from './ModuleGrid'
 import Calendar from '../calendar/Calendar'
@@ -74,11 +75,19 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         </div>
 
         <div className="dashboard-header-right">
-          {presence > 1 && (
-            <span className="dashboard-presence" title={`${presence} dispositivos conectados`}>
-              <span className="dashboard-presence-dot" />
-              {presence}
-            </span>
+          {presence.length > 1 && (
+            <div className="dashboard-presence" title={presence.map(p => p.name).join(', ')}>
+              {presence.slice(0, 4).map((p, i) => (
+                <span
+                  key={i}
+                  className="dashboard-presence-avatar"
+                  style={{ background: p.color, color: readableTextColor(p.color) }}
+                >
+                  {p.name.charAt(0)}
+                </span>
+              ))}
+              {presence.length > 4 && <span className="dashboard-presence-more">+{presence.length - 4}</span>}
+            </div>
           )}
           <button className="btn-ghost btn-icon" onClick={() => setShowSettings(true)} aria-label="Ajustes">
             <IconSettings />

@@ -3,6 +3,7 @@ import './notes.css'
 import type { Note } from '../../types'
 import type { UpdateNoteResult } from './useNotes'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { formatRelativeTime } from '../../shared/relativeTime'
 
 interface Props {
   notes: Note[]
@@ -246,6 +247,12 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
               <IconTrash />
             </button>
           </div>
+
+          {selectedNote.last_editor_name && (
+            <p className="notes-attribution">
+              Editado por <strong>{selectedNote.last_editor_name}</strong> · {formatRelativeTime(selectedNote.updated_at)}
+            </p>
+          )}
 
           {showConflict && (
             <div className="notes-conflict" role="alert">

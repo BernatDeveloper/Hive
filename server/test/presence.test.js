@@ -16,7 +16,7 @@ function client(ip) {
   return s
 }
 
-test('presence: sube al entrar y baja al salir', async () => {
+test('presence: sube al entrar y baja al salir, con nombre y color', async () => {
   const name = 'pres-' + Math.random().toString(36).slice(2, 8)
 
   const a = client('10.50.0.1')
@@ -25,25 +25,57 @@ test('presence: sube al entrar y baja al salir', async () => {
   await once(a, 'room-created')
 
   const presA = once(a, 'presence')
-  a.emit('join-room', { name, password: 'test1234' })
+  a.emit('join-room', { name, password: 'test1234', editor_name: 'Ana', editor_color: '#ff0000' })
   await once(a, 'access-granted')
-  assert.equal((await presA).count, 1)
+  const p1 = await presA
+  assert.equal(p1.people.length, 1)
+  assert.deepEqual(p1.people[0], { name: 'Ana', color: '#ff0000' })
 
-  // B entra → A recibe presence 2
+  // B entra → A recibe presence con los dos nombres
   const b = client('10.50.0.2')
   await once(b, 'connect')
   const presA2 = once(a, 'presence')
-  b.emit('join-room', { name, password: 'test1234' })
+  b.emit('join-room', { name, password: 'test1234', editor_name: 'Beto', editor_color: '#00FF00' })
   await once(b, 'access-granted')
-  assert.equal((await presA2).count, 2)
+  const p2 = await presA2
+  assert.equal(p2.people.length, 2)
+  assert.ok(p2.people.some(p => p.name === 'Ana'))
+  assert.ok(p2.people.some(p => p.name === 'Beto' && p.color === '#00ff00')) // el color se guarda en minúsculas
 
   // get-presence bajo demanda
   const onDemand = once(b, 'presence')
   b.emit('get-presence')
-  assert.equal((await onDemand).count, 2)
+  assert.equal((await onDemand).people.length, 2)
 
-  // B se desconecta → A recibe presence 1
+  // B se desconecta → A recibe presence solo con Ana
   const presA3 = once(a, 'presence')
   b.disconnect()
-  assert.equal((await presA3).count, 1)
+  const p3 = await presA3
+  assert.equal(p3.people.length, 1)
+  assert.equal(p3.people[0].name, 'Ana')
+})
+
+test('presence: identidad ausente o con forma inválida cae a valores por defecto', async () => {
+  const name = 'pres-' + Math.random().toString(36).slice(2, 8)
+  const a = client('10.50.0.3')
+  await once(a, 'connect')
+  a.emit('create-room', { name, password: 'test1234' })
+  await once(a, 'room-created')
+
+  const presA = once(a, 'presence')
+  a.emit('join-room', { name, password: 'test1234' }) // sin editor_name/editor_color
+  await once(a, 'access-granted')
+  const p = await presA
+  assert.equal(p.people[0].name, 'Invitado')
+  assert.match(p.people[0].color, /^#[0-9a-f]{6}$/)
+
+  const b = client('10.50.0.4')
+  await once(b, 'connect')
+  const presA2 = once(a, 'presence')
+  b.emit('join-room', { name, password: 'test1234', editor_name: '   ', editor_color: 'no-es-un-color' })
+  await once(b, 'access-granted')
+  const p2 = await presA2
+  assert.equal(p2.people.length, 2)
+  assert.ok(p2.people.every(x => x.name === 'Invitado'), 'nombre ausente o en blanco cae a "Invitado"')
+  assert.ok(p2.people.every(x => /^#[0-9a-f]{6}$/.test(x.color)), 'color inválido cae a un hex por defecto')
 })

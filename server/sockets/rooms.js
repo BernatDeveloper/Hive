@@ -7,7 +7,7 @@ import { logger } from '../lib/logger.js'
 import { createRateLimiter } from '../lib/rateLimit.js'
 import { isAuthedFor, markAuthed, broadcast } from './helpers.js'
 import { safeOn } from './handler.js'
-import { emitPresence } from './presence.js'
+import { emitPresence, setPresence } from './presence.js'
 import { MAX, MIN_PASSWORD, str, isObject } from './validate.js'
 
 // Fuerza bruta: máx. 10 intentos de auth por IP y minuto.
@@ -44,7 +44,7 @@ export function registerRoomHandlers(io, socket) {
     socket.emit('room-created', { name })
   })
 
-  safeOn(socket, 'join-room', 'access-denied', 'No se pudo acceder a la sala', async ({ name, password }) => {
+  safeOn(socket, 'join-room', 'access-denied', 'No se pudo acceder a la sala', async ({ name, password, editor_name, editor_color }) => {
     if (tooManyAttempts(socket)) return socket.emit('access-denied', RATE_LIMITED)
     if (!str(name, MAX.roomName) || !str(password, MAX.password)) return
     const result = await verifyRoomAccess(name, password)
@@ -53,6 +53,7 @@ export function registerRoomHandlers(io, socket) {
       return
     }
     markAuthed(socket, name)
+    setPresence(name, socket.id, editor_name, editor_color)
     socket.emit('access-granted', {
       room: result.room,
       events: getEvents(name),

@@ -93,6 +93,8 @@ proyecto no está desplegado, así que no hay ALTER TABLE que mantener).
 | reminder_offset | INTEGER | nullable; minutos de antelación del recordatorio push |
 | reminder_sent | INTEGER | 0/1; evita reenviar el mismo recordatorio |
 | updated_at | TEXT | ISO con milisegundos y `Z` (`toISOString()`), estrictamente creciente (`nextTimestamp`) — testigo de versión para la concurrencia optimista del evento único, además de usarse para cleanup |
+| last_editor_name | TEXT | nullable; identidad de dispositivo (Fase 9) de quien creó/editó por última vez — informativa, spoofeable |
+| last_editor_color | TEXT | nullable; hex, color de esa identidad |
 
 No existe columna `category`: se eliminó por completo (el color es el único eje de clasificación de un evento — ver "Colores de evento").
 
@@ -114,6 +116,8 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | body | TEXT | default '' |
 | created_at | TEXT | ISO datetime |
 | updated_at | TEXT | updated on each write, used for cleanup |
+| last_editor_name | TEXT | nullable; igual que en `event` |
+| last_editor_color | TEXT | nullable; igual que en `event` |
 
 ### Tabla `list_item`
 | column | type | notes |
@@ -131,14 +135,14 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | Client emits | Payload | Server responds |
 |--------------|---------|-----------------|
 | `create-room` | `{ name, password, timezone? }` | `room-created` / `room-error`. `timezone` = `Intl.DateTimeFormat().resolvedOptions().timeZone` del creador; si falta o es inválida, `'Europe/Madrid'` |
-| `join-room` | `{ name, password }` | `access-granted` / `access-denied` |
+| `join-room` | `{ name, password, editor_name?, editor_color? }` | `access-granted` / `access-denied`. `editor_name`/`editor_color` = identidad de dispositivo (Fase 9), usada para la presencia de este socket en la sala; ausente o inválida → `'Invitado'` / un hex por defecto |
 | `update-room-style` | `{ name, styles }` | `style-updated` (room broadcast) |
 | `update-room-timezone` | `{ name, timezone }` | `room-timezone-updated` (`{ name, timezone }`, room broadcast). Evento propio, no mezclado con `update-room-style` |
-| `create-event` | `{ room, event }` | `event-created` si es evento único; `events-created` (array) si `event.recurrence_rule` genera una serie |
-| `update-event` | `{ room, event, scope? }` | Evento único (sin `recurrence_id`): concurrencia optimista — `event.expected_updated_at` (opcional) es la versión base; si coincide → `event-updated`; si no → `event-conflict` (`{ current }`) **solo al emisor**, sin persistir; sin `expected_updated_at` → last-write-wins (compat). Instancia de serie según `scope` (siempre LWW, sin control de versión): `single` → `event-updated` (desengancha la instancia); `future` → `series-updated` (`{ events }`, subconjunto con `recurrence_id` nuevo); `all` (defecto) → `series-updated` |
+| `create-event` | `{ room, event }` | `event-created` si es evento único; `events-created` (array) si `event.recurrence_rule` genera una serie. `event.editor_name`/`event.editor_color` (opcionales) se guardan como `last_editor_name`/`last_editor_color` |
+| `update-event` | `{ room, event, scope? }` | Evento único (sin `recurrence_id`): concurrencia optimista — `event.expected_updated_at` (opcional) es la versión base; si coincide → `event-updated`; si no → `event-conflict` (`{ current }`) **solo al emisor**, sin persistir; sin `expected_updated_at` → last-write-wins (compat). Instancia de serie según `scope` (siempre LWW, sin control de versión): `single` → `event-updated` (desengancha la instancia); `future` → `series-updated` (`{ events }`, subconjunto con `recurrence_id` nuevo); `all` (defecto) → `series-updated`. En todas las ramas, `event.editor_name`/`event.editor_color` actualizan `last_editor_name`/`last_editor_color` |
 | `delete-event` | `{ room, id, scope? }` | evento único → `event-deleted`. Instancia de serie: `single` → `event-deleted`; `future` → `events-deleted` (`{ ids }`); `all` (defecto) → `series-deleted` (`{ recurrence_id }`). Ack `{ undoToken, label }` (ventana de deshacer) |
-| `create-note` | `{ room, title }` | `note-created` (room broadcast) |
-| `update-note` | `{ room, note: { id, title, body, updated_at } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
+| `create-note` | `{ room, title, editor_name?, editor_color? }` | `note-created` (room broadcast) |
+| `update-note` | `{ room, note: { id, title, body, updated_at, editor_name?, editor_color? } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
 | `delete-note` | `{ room, id }` | `note-deleted` (broadcast) + ack `{ undoToken, label }` |
 | `create-list` | `{ room, title }` | `list-created` (room broadcast) |
 | `delete-list` | `{ room, id }` | `list-deleted` (broadcast) + ack `{ undoToken, label }` (borra en cascada los ítems; el undo los restaura) |
@@ -146,11 +150,11 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | `toggle-list-item` | `{ room, id, checked }` | `list-item-updated` (room broadcast) |
 | `delete-list-item` | `{ room, id }` | `list-item-deleted` (room broadcast) |
 | `undo-delete` | `{ room, token }` | re-inserta lo borrado y difunde su `*-created`; ack `{ ok, expired? }` |
-| `get-presence` | `—` | `presence` (`{ count }`) al emisor |
+| `get-presence` | `—` | `presence` (`{ people: { name, color }[] }`) al emisor |
 | `subscribe-push` / `unsubscribe-push` | `{ room, subscription }` / `{ endpoint }` | `push-subscribed` / `push-unsubscribed` / `push-error` |
 
-Además, el servidor difunde `presence` (`{ count }`) a la sala al entrar/salir
-cualquier socket (`sockets/presence.js`).
+Además, el servidor difunde `presence` (`{ people: { name, color }[] }`) a la
+sala al entrar/salir cualquier socket (`sockets/presence.js`).
 
 ### Payload `access-granted`
 ```typescript
@@ -226,6 +230,23 @@ mostrando la hora de pared tal cual para todos, en cualquier navegador.
   (`single`/`future`/`all`, con `recurrence_id`) siguen en last-write-wins sin
   aviso — no llevan `expected_updated_at`.
 
+## Identidad ligera (sin cuentas)
+
+Nombre + color **por dispositivo**, guardados en `localStorage` (`client/src/features/identity/identity.ts`) — **sin registro, sin servidor**. Es puramente informativa y **spoofeable**: cualquiera en la sala puede ponerse el nombre que quiera. No debe usarse para construir permisos ni un "admin" real.
+
+- `localStorage['identity']`: identidad global `{ name, color }`. `localStorage['identity:<room>']`: override opcional solo para esa sala. `getIdentity(room?)` resuelve: override de esa sala → global → un invitado con color aleatorio de emergencia.
+- Alta única: `RoomEntry` intercala una pantalla (`IdentityForm`) antes del primer "Crear sala"/"Unirse a sala" si no hay identidad global aún (`hasIdentity()`); no vuelve a preguntar.
+- Editable en cualquier momento desde `RoomSettings` → "Tu identidad" (nombre + paleta de 8 colores + interruptor "Solo en esta sala", que decide si guarda como override de esa sala o como identidad global).
+- Se adjunta como `editor_name`/`editor_color` en `join-room` (presencia) y en `create-event`/`update-event`/`create-note`/`update-note` (atribución) — ver más abajo. Servidor: nombre recortado a 40 caracteres, color validado como hex `#rrggbb`; cualquier valor ausente o con forma inválida cae a un valor por defecto (`'Invitado'` / un hex), nunca se rechaza el alta ni la escritura.
+
+### Presencia con nombres
+
+`server/sockets/presence.js` mantiene en memoria `room → Map<socketId, {name, color}>` (poblado en `join-room`, limpiado en `disconnecting`). El Dashboard muestra hasta 4 avatares con la inicial del nombre (`readableTextColor` para el contraste) + "+N" si hay más, con el listado completo en el `title` (`usePresence` devuelve `PresencePerson[]`, no ya un número).
+
+### Atribución ("Editado por…")
+
+`event`/`note` guardan `last_editor_name`/`last_editor_color` (se actualizan en cada create/update, incluidas las ramas de serie). `EventModal` (bajo el título, solo al editar) y `Notes` (en la cabecera de la nota seleccionada) muestran "Editado por **X** · hace N" usando `formatRelativeTime` (`client/src/shared/relativeTime.ts`) sobre `updated_at`.
+
 ## Colores de evento
 
 No hay categorías. Cada sala define su **paleta** de colores de evento en Ajustes (`RoomSettings` → "Colores de eventos", persistida en `room_style.event_colors`). Al crear/editar un evento se elige un color de esa paleta o "Por defecto" (`color: null` → hereda el `primary_color` de la sala). Se usa para:
@@ -237,17 +258,18 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 ## Flujo de usuario
 
 1. Pantalla de inicio → "Crear sala" o "Unirse a sala"
-2. Crear: nombre + contraseña (mín. 8, con indicador de fortaleza) + confirmación → `create-room` → auto-join → Dashboard
-3. Unirse: nombre + contraseña → `join-room` → Dashboard
+2. Si es la primera vez en este dispositivo: pantalla de alta de identidad ("¿Cómo te llamamos?" — nombre + color) antes de continuar; no vuelve a aparecer
+3. Crear: nombre + contraseña (mín. 8, con indicador de fortaleza) + confirmación → `create-room` → auto-join → Dashboard
+4. Unirse: nombre + contraseña → `join-room` → Dashboard
    - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
-4. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
-5. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
-6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo, **paleta de colores de evento** (guardados en `room_style`) y **zona horaria de la sala** (gobierna los recordatorios, no el display)
-7. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
-8. Presencia: el header del Dashboard muestra un punto + número si hay más de un dispositivo conectado a la sala
-9. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
-10. Calendario → botón ⬇ en el panel de "Próximos": descarga un `.ics` con todos los eventos (`features/calendar/ics.ts`, generado en cliente)
-11. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
+5. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
+6. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
+7. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo, **paleta de colores de evento** (guardados en `room_style`), **zona horaria de la sala** (gobierna los recordatorios, no el display) y **tu identidad** (nombre/color de dispositivo, global o solo para esta sala)
+8. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
+9. Presencia: el header del Dashboard muestra hasta 4 avatares (inicial + color de cada identidad conectada) si hay más de un dispositivo en la sala
+10. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
+11. Calendario → botón ⬇ en el panel de "Próximos": descarga un `.ics` con todos los eventos (`features/calendar/ics.ts`, generado en cliente)
+12. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
 
 ## Estructura de componentes
 
@@ -255,8 +277,8 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 SocketProvider           # context de estado de conexión
 └── App                  # + useServiceWorkerUpdate() → banner "versión nueva"
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
-    ├── RoomEntry        # home/create/join — auth con timeout de red (awaitAuthResponse)
-    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con indicador de presencia)
+    ├── RoomEntry        # home/identity/create/join — auth con timeout de red (awaitAuthResponse); IdentityForm si no hay identidad de dispositivo aún
+    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con avatares de presencia)
         ├── RoomSettings # color modal con presets + preview + zona horaria (emits update-room-style, update-room-timezone, subscribe-push)
         ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente
         │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por color
@@ -298,6 +320,7 @@ interface Event {
   recurrence_id: string | null
   reminder_offset: number | null; reminder_sent: 0 | 1
   updated_at: string   // testigo de versión (concurrencia optimista, evento único)
+  last_editor_name: string | null; last_editor_color: string | null   // identidad de dispositivo (Fase 9)
 }
 
 interface Room {
@@ -306,6 +329,10 @@ interface Room {
   text_color: string | null; sidebar_color: string | null
   event_colors: string[]   // paleta de la sala
   timezone: string   // zona IANA; gobierna los recordatorios, no el display
+}
+
+interface PresencePerson {
+  name: string; color: string
 }
 
 interface List {
@@ -320,6 +347,7 @@ interface ListItem {
 interface Note {
   id: string; room: string; title: string
   body: string; created_at: string; updated_at: string
+  last_editor_name: string | null; last_editor_color: string | null
 }
 ```
 
@@ -337,19 +365,20 @@ interface Note {
 
 ```
 features/
-  auth/         RoomEntry, HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
-  dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
-  calendar/     Calendar + calendar.css (incluye el banner de conflicto de evento), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }), EventsPanel, options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`), dateUtils.ts (helpers de fecha puros extraídos de EventModal: addDaysToDateStr, isoToLocalDate/Time, buildEventDates) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
+  auth/         RoomEntry (intercala IdentityForm antes de create/join si hace falta), HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
+  identity/     identity.ts (Identity, getIdentity/get·setGlobalIdentity/get·setRoomOverride/clearRoomOverride — localStorage) + identity.test.ts (entorno jsdom vía `// @vitest-environment jsdom`), IdentityForm (alta única de nombre+color) + identity.css (swatches, reutilizado también por RoomSettings)
+  dashboard/    Dashboard (avatares de presencia en el header) + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
+  calendar/     Calendar + calendar.css (banner de conflicto de evento + atribución), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar), EventsPanel, options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros extraídos de EventModal: addDaysToDateStr, isoToLocalDate/Time, buildEventDates) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
   lists/        Lists + lists.css, useLists
-  settings/     RoomSettings (colores + selector de zona horaria vía Intl.supportedValuesOf) + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
-  notes/        Notes + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note)
+  settings/     RoomSettings (colores + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad") + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
+  notes/        Notes (muestra "Editado por…" en la nota seleccionada) + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note, adjunta editor_name/editor_color vía getIdentity)
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
   queue.ts              cola de escrituras offline: emitWrite / emitWriteAck encolan si no hay conexión y vacían en orden al recibir `access-granted`
   usePendingWrites.ts   hook → nº de escrituras encoladas
   SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
   useConnection.ts      hook → estado de conexión
-  usePresence.ts        hook → nº de dispositivos en la sala (>= 1); pide `get-presence` al montar
+  usePresence.ts        hook → PresencePerson[] presentes en la sala; pide `get-presence` al montar
   ConnectionBanner.tsx  barra fija "Sin conexión…" tras 3s de gracia (+ "N cambios sin sincronizar" si hay cola), montada en App
   authFlow.ts           awaitAuthResponse(): listeners `once` + timeout de red (8s) + connect_error, con cleanup único
   connection-context.ts / connection-banner.css / index.ts (barrel)
@@ -358,6 +387,7 @@ app.css         estilos del banner de actualización
 shared/
   modal.css     estilos base del modal (usado por EventModal y RoomSettings)
   color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar, EventModal) + color.test.ts
+  relativeTime.ts   formatRelativeTime (ISO → "hace N min/horas/días"; usado por la atribución en EventModal y Notes) + relativeTime.test.ts
 hooks/
   useIsMobile           breakpoint responsive (default 640px)
 push.ts         helpers de suscripción a Web Push (subscribeToPush, getCurrentSubscription)
@@ -413,7 +443,7 @@ sockets/
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
   handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; reenvían el ack de socket.io al handler; safeAuthedOn además exige isAuthedFor(payload.room)
   validate.js         MAX (longitudes) + MIN_PASSWORD, str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
-  presence.js         `presence`/`get-presence` (nº de sockets por sala vía io.sockets.adapter.rooms) + handler `disconnecting`
+  presence.js         `presence`/`get-presence` con identidad (room → Map<socketId, {name, color}>, poblado por setPresence() en join-room) + handler `disconnecting`
   undo.js             `undo-delete` → restaura desde la ventana de `services/undo.js`
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 test/
@@ -422,9 +452,10 @@ test/
   handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
-  presence.test.js    presence sube al entrar, baja al salir, get-presence bajo demanda
+  presence.test.js    presence con nombre/color al entrar y salir; identidad ausente/inválida cae a valores por defecto
   undo.test.js        undo de evento/serie/lista(+ítems)/nota; token caducado; undo de otra sala rechazado
   event-concurrency.test.js   concurrencia optimista de eventos: ok / conflict (event-conflict) / dos editores / LWW sin expected_updated_at / not-found
+  attribution.test.js  last_editor_name/color en create/update de eventos (incl. series) y notas; se restaura correctamente con undo
   contract.test.js    fija la forma exacta de cada objeto/payload que emite el servidor (drift detector vs client/src/types.ts — no hay tipos compartidos automáticos)
 ```
 
@@ -433,8 +464,10 @@ test/
   falla con `ERR_PNPM_IGNORED_BUILDS` de better-sqlite3 aunque el `.node` ya exista.
 - **Tests del cliente** (Vitest): `cd client && pnpm test`. Cubren solo lógica
   pura (sin componentes): `dateUtils.test.ts`, `ics.test.ts`,
-  `password-strength.test.ts`, `color.test.ts`. `vite.config.ts` declara
-  `test.environment: 'node'` (no hace falta DOM para estos).
+  `password-strength.test.ts`, `color.test.ts`, `relativeTime.test.ts`.
+  `vite.config.ts` declara `test.environment: 'node'` (no hace falta DOM para
+  estos) — la excepción es `identity.test.ts`, que necesita `localStorage`
+  real y por eso fija `// @vitest-environment jsdom` en su propia cabecera.
 
 - **Errores de handler:** cada handler se registra con `safeOn`/`safeAuthedOn`; una
   excepción se loguea (`logger.error('socket:<event>', err)`) y emite su evento de

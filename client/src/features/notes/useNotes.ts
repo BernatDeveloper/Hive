@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { socket, emitWrite, emitWriteAck } from '../../socket'
 import type { Note, UndoOffer } from '../../types'
+import { getIdentity } from '../identity/identity'
 
 export interface UpdateNoteResult {
   status: 'ok' | 'conflict' | 'not-found' | 'invalid' | 'timeout'
@@ -32,12 +33,19 @@ export function useNotes(room: string, initial: Note[]) {
 
   return {
     notes,
-    createNote: () => emitWrite('create-note', { room, title: 'Sin título' }),
+    createNote: () => {
+      const identity = getIdentity(room)
+      emitWrite('create-note', { room, title: 'Sin título', editor_name: identity.name, editor_color: identity.color })
+    },
     // Guarda con control de versión optimista: el servidor responde por ack
     // si la versión base (`updatedAt`) sigue vigente o hay conflicto. Sin
     // conexión se encola y resuelve `timeout` (el guardado sincroniza al volver).
-    updateNote: (id: string, title: string, body: string, updatedAt: string): Promise<UpdateNoteResult> =>
-      emitWriteAck<UpdateNoteResult>('update-note', { room, note: { id, title, body, updated_at: updatedAt } }, { status: 'timeout' }),
+    updateNote: (id: string, title: string, body: string, updatedAt: string): Promise<UpdateNoteResult> => {
+      const identity = getIdentity(room)
+      return emitWriteAck<UpdateNoteResult>('update-note', {
+        room, note: { id, title, body, updated_at: updatedAt, editor_name: identity.name, editor_color: identity.color },
+      }, { status: 'timeout' })
+    },
     deleteNote: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-note', { room, id }, {}),
   }
 }

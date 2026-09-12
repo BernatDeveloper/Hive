@@ -38,7 +38,9 @@ export function createSchema() {
       recurrence_id TEXT,
       reminder_offset INTEGER,
       reminder_sent INTEGER DEFAULT 0,
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TEXT DEFAULT (datetime('now')),
+      last_editor_name TEXT,
+      last_editor_color TEXT
     )
   `)
 
@@ -74,6 +76,8 @@ export function createSchema() {
       body TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      last_editor_name TEXT,
+      last_editor_color TEXT,
       FOREIGN KEY (room) REFERENCES room(name) ON DELETE CASCADE
     )
   `)

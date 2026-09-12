@@ -3,6 +3,7 @@ import '../../shared/modal.css'
 import type { Event, RecurrenceRule, RecurrenceScope } from '../../types'
 import { RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './options'
 import { readableTextColor } from '../../shared/color'
+import { formatRelativeTime } from '../../shared/relativeTime'
 import {
   todayDateStr, addDaysToDateStr, isoToLocalDate, isoToLocalTime,
   dayOfWeekName, formatDateShort, buildEventDates,
@@ -152,6 +153,13 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h3>{isEdit ? 'Editar evento' : 'Nuevo evento'}</h3>
+
+        {isEdit && event?.last_editor_name && (
+          <p className="event-attribution">
+            Editado por <strong>{event.last_editor_name}</strong>
+            {event.updated_at && <> · {formatRelativeTime(event.updated_at)}</>}
+          </p>
+        )}
 
         {/* Color swatches */}
         <div className="event-colors">

@@ -26,6 +26,14 @@ export interface Event {
   reminder_offset: number | null
   reminder_sent: 0 | 1
   updated_at: string   // testigo de versión para la concurrencia optimista (evento único)
+  last_editor_name: string | null    // identidad de dispositivo (Fase 9) — informativa, spoofeable
+  last_editor_color: string | null
+}
+
+// Persona presente en la sala ahora mismo (identidad de dispositivo, no cuenta).
+export interface PresencePerson {
+  name: string
+  color: string
 }
 
 export interface Room {
@@ -61,4 +69,6 @@ export interface Note {
   body: string
   created_at: string
   updated_at: string
+  last_editor_name: string | null
+  last_editor_color: string | null
 }

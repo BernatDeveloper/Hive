@@ -1,0 +1,19 @@
+.identity-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.identity-color-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.identity-color-swatch:hover { transform: scale(1.08); }
+.identity-color-swatch--on {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
+}

@@ -87,6 +87,8 @@ export function generateRecurrenceInstances(baseEvent, rule) {
       recurrence_rule: rule,
       recurrence_id: recurrenceId,
       reminder_offset: baseEvent.reminder_offset ?? null,
+      editor_name: baseEvent.editor_name ?? null,
+      editor_color: baseEvent.editor_color ?? null,
     }))
   }
 }

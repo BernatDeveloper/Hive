@@ -554,7 +554,45 @@ mismo segundo colisionarían). Hay que adoptar el esquema de las notas:
 
 ---
 
-# Fase 9 — Identidad ligera (sin cuentas)
+# Fase 9 — Identidad ligera (sin cuentas) ✅ HECHA
+
+> **Completada.** 9.1, 9.2 y 9.3 implementadas tal cual se especifican, con
+> estas notas de implementación:
+> - 9.1: la puerta de identidad ("¿Cómo te llamamos?") se intercala en
+>   `RoomEntry` — se muestra una sola vez, antes del primer "Crear sala" o
+>   "Unirse a sala", y no vuelve a aparecer una vez hay identidad global. Se
+>   adjunta como `editor_name`/`editor_color` en `join-room`,
+>   `create-event`/`update-event` y `create-note`/`update-note` — **no** en
+>   los writes de listas (`create-list-item`/`toggle-list-item`, mencionados
+>   en el borrador original de la fase): 9.3 solo persiste atribución en
+>   `event` y `note`, así que mandar esos campos en listas no tenía consumidor
+>   y se dejó fuera para no enviar payload muerto.
+> - 9.2: la presencia pasó de `{ count }` a `{ people: [{name,color}]}` — un
+>   cambio de contrato "rompible" a propósito, fijado en `contract.test.js` y
+>   `presence.test.js` (reescrito). El Dashboard muestra hasta 4 avatares +
+>   "+N".
+> - 9.3: la atribución también se propaga en las ramas de **serie**
+>   (`updateSeries`/`updateSeriesFuture`/`updateEventDetach`), no solo en el
+>   evento único — necesario para que "Editado por…" no se quede obsoleto al
+>   editar una serie completa; el borrador solo mencionaba `updateEvent`/`updateNote`
+>   explícitamente pero dejarlo fuera de las series habría sido un hueco visible
+>   en la misma funcionalidad.
+> - Encontrado y arreglado por el camino: `useRoomStyle.ts` sustituía la sala
+>   entera (en vez de fusionar) al recibir `style-updated`/ahora también
+>   `room-timezone-updated` — ver la nota ya dejada en el commit de la Fase 8.
+> - No se hizo una prueba visual en navegador real para esta fase: al intentar
+>   levantar un Edge headless con `--user-data-dir` propio para un smoke test
+>   con dos identidades, la conexión de depuración remota (puerto 9333)
+>   resultó apuntar al Edge personal ya abierto del usuario (con sus pestañas,
+>   extensiones y sesión reales) en vez de a una instancia aislada — la
+>   conexión WebSocket falló antes de enviar ningún comando, así que no se
+>   tocó ese navegador, pero se abandonó el intento por seguridad. La
+>   verificación de esta fase se apoya en los tests automáticos + revisión
+>   manual del código, no en una comprobación visual end-to-end.
+> - Servidor: 85 tests en verde (76 + 9: `presence.test.js` reescrito con 2
+>   tests, `attribution.test.js` con 8, netos +9 tras contar los 2 que ya
+>   existían). Cliente: 48 tests (33 + `identity.test.ts` 11 + `relativeTime.test.ts` 4),
+>   build y `tsc` limpios, sin lint nuevo.
 
 Objetivo: nombre + color **por dispositivo** (localStorage), con **override por
 sala**, enviado con cada escritura. Desbloquea presencia con nombres y "editado

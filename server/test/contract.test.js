@@ -8,11 +8,12 @@ import { startTestServer, connect, once, emitAck } from './helpers.js'
 // no hay tipos compartidos automáticos entre cliente y servidor.
 
 // Claves de cada tipo, tal como las declara client/src/types.ts
-const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at']
+const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at', 'last_editor_name', 'last_editor_color']
 const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors']
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
-const NOTE_KEYS = ['id', 'room', 'title', 'body', 'created_at', 'updated_at']
+const NOTE_KEYS = ['id', 'room', 'title', 'body', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
+const PRESENCE_PERSON_KEYS = ['name', 'color']
 
 const keysOf = o => Object.keys(o).sort()
 const sameKeys = (o, expected, msg) => assert.deepEqual(keysOf(o), [...expected].sort(), msg)
@@ -30,7 +31,7 @@ async function room(ip) {
   await once(s, 'connect')
   s.emit('create-room', { name, password: 'test1234' })
   await once(s, 'room-created')
-  s.emit('join-room', { name, password: 'test1234' })
+  s.emit('join-room', { name, password: 'test1234', editor_name: 'Ana', editor_color: '#ff0000' })
   return { s, name, granted: await once(s, 'access-granted') }
 }
 
@@ -110,9 +111,12 @@ test('delete-event ack: { undoToken, label }', async () => {
   assert.deepEqual(keysOf(ack), ['label', 'undoToken'])
 })
 
-test('presence: { count }', async () => {
+test('presence: { people: [{ name, color }] }', async () => {
   const { s } = await room('10.70.0.7')
   const p = once(s, 'presence')
   s.emit('get-presence')
-  assert.deepEqual(keysOf(await p), ['count'])
+  const payload = await p
+  assert.deepEqual(keysOf(payload), ['people'])
+  assert.ok(Array.isArray(payload.people))
+  sameKeys(payload.people[0], PRESENCE_PERSON_KEYS, 'presence.people[0]')
 })

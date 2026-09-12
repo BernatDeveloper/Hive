@@ -5,10 +5,10 @@ import { safeAuthedOn } from './handler.js'
 import { MAX, str, isObject } from './validate.js'
 
 export function registerNoteHandlers(io, socket) {
-  safeAuthedOn(socket, 'create-note', 'note-error', { message: 'No se pudo crear la nota' }, ({ room, title }) => {
+  safeAuthedOn(socket, 'create-note', 'note-error', { message: 'No se pudo crear la nota' }, ({ room, title, editor_name, editor_color }) => {
     const trimmed = typeof title === 'string' ? title.trim() : ''
     const safeTitle = trimmed && trimmed.length <= MAX.noteTitle ? trimmed : 'Sin título'
-    const note = createNote(room, safeTitle)
+    const note = createNote(room, safeTitle, editor_name, editor_color)
     broadcast(io, room, 'note-created', note)
   })
 
@@ -21,6 +21,8 @@ export function registerNoteHandlers(io, socket) {
       title: typeof note.title === 'string' ? note.title.slice(0, MAX.noteTitle) : '',
       body: typeof note.body === 'string' ? note.body.slice(0, MAX.noteBody) : '',
       expected_updated_at: typeof note.updated_at === 'string' ? note.updated_at : null,
+      editor_name: note.editor_name,
+      editor_color: note.editor_color,
     }
     const result = updateNote(safeNote)
     if (result.status === 'ok') {

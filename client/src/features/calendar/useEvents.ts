@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { socket, emitWrite, emitWriteAck } from '../../socket'
 import type { Event, RecurrenceScope, UndoOffer } from '../../types'
 import type { EventSavePayload } from './EventModal'
+import { getIdentity } from '../identity/identity'
 
 // Estado de eventos del calendario: eventos únicos y series recurrentes.
 // Refresca la lista entera desde `access-granted` (reconexión).
@@ -61,9 +62,14 @@ export function useEvents(room: string, initial: Event[]) {
     events,
     conflict,
     dismissConflict: () => setConflict(null),
-    createEvent: (data: Partial<Event>) => emitWrite('create-event', { room, event: data }),
-    updateEvent: (data: EventSavePayload, scope?: RecurrenceScope) =>
-      emitWrite('update-event', { room, event: data, scope }),
+    createEvent: (data: Partial<Event>) => {
+      const identity = getIdentity(room)
+      emitWrite('create-event', { room, event: { ...data, editor_name: identity.name, editor_color: identity.color } })
+    },
+    updateEvent: (data: EventSavePayload, scope?: RecurrenceScope) => {
+      const identity = getIdentity(room)
+      emitWrite('update-event', { room, event: { ...data, editor_name: identity.name, editor_color: identity.color }, scope })
+    },
     deleteEvent: (id: string, scope?: RecurrenceScope): Promise<UndoOffer> =>
       emitWriteAck<UndoOffer>('delete-event', { room, id, scope }, {}),
   }

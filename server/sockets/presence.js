@@ -1,15 +1,43 @@
-// Presencia: cuántos sockets hay en cada sala. Se apoya en las rooms de
-// Socket.io que ya usa la autorización.
+// Presencia con identidad (Fase 9): quién está en cada sala, no solo cuántos.
+// room -> Map<socketId, { name, color }>. En memoria — se reconstruye con
+// cada join, no sobrevive a un reinicio (igual que antes con el conteo).
 
-// Nº de sockets en una room (excluye la "room" propia de cada socket, que
-// comparte nombre con socket.id — pero los nombres de sala no son UUIDs de
-// socket, así que basta con leer el adaptador).
-export function roomCount(io, room) {
-  return io.sockets.adapter.rooms.get(room)?.size ?? 0
+const presenceByRoom = new Map()
+
+const HEX = /^#[0-9a-fA-F]{6}$/
+const MAX_NAME = 40
+const DEFAULT_NAME = 'Invitado'
+const DEFAULT_COLOR = '#0071e3'
+
+// Identidad informativa y spoofeable (ver MEJORAS-2.md Fase 9): sin
+// registro, así que cualquier valor ausente o con forma inválida cae a un
+// valor por defecto en vez de rechazar el join.
+function sanitizeIdentity(name, color) {
+  const safeName = typeof name === 'string' && name.trim().length > 0
+    ? name.trim().slice(0, MAX_NAME)
+    : DEFAULT_NAME
+  const safeColor = typeof color === 'string' && HEX.test(color) ? color.toLowerCase() : DEFAULT_COLOR
+  return { name: safeName, color: safeColor }
 }
 
-export function emitPresence(io, room, count = roomCount(io, room)) {
-  io.to(room).emit('presence', { count })
+export function setPresence(room, socketId, name, color) {
+  if (!presenceByRoom.has(room)) presenceByRoom.set(room, new Map())
+  presenceByRoom.get(room).set(socketId, sanitizeIdentity(name, color))
+}
+
+function peopleOf(room) {
+  return [...(presenceByRoom.get(room)?.values() ?? [])]
+}
+
+function removePresence(room, socketId) {
+  const people = presenceByRoom.get(room)
+  if (!people) return
+  people.delete(socketId)
+  if (people.size === 0) presenceByRoom.delete(room)
+}
+
+export function emitPresence(io, room) {
+  io.to(room).emit('presence', { people: peopleOf(room) })
 }
 
 export function registerPresenceHandlers(io, socket) {
@@ -18,16 +46,16 @@ export function registerPresenceHandlers(io, socket) {
   // esté listo.
   socket.on('get-presence', () => {
     for (const room of socket.data.authedRooms ?? []) {
-      socket.emit('presence', { count: roomCount(io, room) })
+      socket.emit('presence', { people: peopleOf(room) })
     }
   })
 
-  // `disconnecting` se dispara con el socket aún dentro de sus rooms: contamos
-  // -1 para reflejar el estado tras su salida.
+  // `disconnecting` se dispara con el socket aún dentro de sus rooms.
   socket.on('disconnecting', () => {
     for (const room of socket.rooms) {
       if (room === socket.id) continue
-      emitPresence(io, room, Math.max(0, roomCount(io, room) - 1))
+      removePresence(room, socket.id)
+      emitPresence(io, room)
     }
   })
 }

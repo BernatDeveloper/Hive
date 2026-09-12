@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { socket } from './client'
+import type { PresencePerson } from '../types'
 
-// Nº de dispositivos conectados a la sala actual (>= 1). El servidor emite
+// Quién está conectado a la sala actual (identidad de dispositivo — nunca
+// vacío mientras haya conexión: al menos uno mismo). El servidor emite
 // `presence` al entrar/salir cualquiera.
-export function usePresence() {
-  const [count, setCount] = useState(1)
+export function usePresence(): PresencePerson[] {
+  const [people, setPeople] = useState<PresencePerson[]>([])
 
   useEffect(() => {
-    function onPresence(data: { count: number }) { setCount(Math.max(1, data.count)) }
-    function onDisconnect() { setCount(1) }
+    function onPresence(data: { people: PresencePerson[] }) { setPeople(data.people) }
+    function onDisconnect() { setPeople([]) }
     function requestPresence() { socket.emit('get-presence') }
 
     socket.on('presence', onPresence)
@@ -23,5 +25,5 @@ export function usePresence() {
     }
   }, [])
 
-  return count
+  return people
 }

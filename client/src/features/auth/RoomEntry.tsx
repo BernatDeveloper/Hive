@@ -5,13 +5,16 @@ import type { Room, Event, List, ListItem, Note } from '../../types'
 import HomeScreen from './HomeScreen'
 import CreateRoomForm from './CreateRoomForm'
 import JoinRoomForm from './JoinRoomForm'
+import IdentityForm from '../identity/IdentityForm'
+import { getIdentity, hasIdentity, setGlobalIdentity } from '../identity/identity'
+import type { Identity } from '../identity/identity'
 
 interface Props {
   onEnter: (room: Room, events: Event[], lists: List[], listItems: ListItem[], notes: Note[]) => void
   notice?: string | null
 }
 
-type Mode = 'home' | 'create' | 'join'
+type Mode = 'home' | 'identity' | 'create' | 'join'
 
 interface AccessGranted {
   room: Room
@@ -26,6 +29,9 @@ export default function RoomEntry({ onEnter, notice }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const cancelRef = useRef<(() => void) | null>(null)
+  // A qué pantalla ir tras dar de alta la identidad (solo se pregunta la
+  // primera vez, antes de crear o unirse a una sala).
+  const pendingModeRef = useRef<'create' | 'join'>('create')
 
   // Al desmontar (o cambiar de pantalla) se abortan los listeners pendientes.
   useEffect(() => () => cancelRef.current?.(), [])
@@ -34,7 +40,17 @@ export default function RoomEntry({ onEnter, notice }: Props) {
     cancelRef.current?.()
     setError('')
     setLoading(false)
+    if ((m === 'create' || m === 'join') && !hasIdentity()) {
+      pendingModeRef.current = m
+      setMode('identity')
+      return
+    }
     setMode(m)
+  }
+
+  function finishIdentity(identity: Identity) {
+    setGlobalIdentity(identity)
+    setMode(pendingModeRef.current)
   }
 
   function fail(msg: string) {
@@ -51,6 +67,7 @@ export default function RoomEntry({ onEnter, notice }: Props) {
     setLoading(true)
     setError('')
 
+    const { name: editor_name, color: editor_color } = getIdentity(name)
     cancelRef.current = awaitAuthResponse({
       'room-created': () => {
         // Segunda ronda: unirse a la sala recién creada (timeout propio).
@@ -58,7 +75,7 @@ export default function RoomEntry({ onEnter, notice }: Props) {
           'access-granted': (payload) => enter(name, password, payload as AccessGranted),
           'access-denied': (msg) => fail(msg as string),
         }, fail)
-        socket.emit('join-room', { name, password })
+        socket.emit('join-room', { name, password, editor_name, editor_color })
       },
       'room-error': (msg) => fail(msg as string),
     }, fail)
@@ -70,15 +87,20 @@ export default function RoomEntry({ onEnter, notice }: Props) {
     setLoading(true)
     setError('')
 
+    const { name: editor_name, color: editor_color } = getIdentity(name)
     cancelRef.current = awaitAuthResponse({
       'access-granted': (payload) => enter(name, password, payload as AccessGranted),
       'access-denied': (msg) => { forgetRoom(); fail(msg as string) },
     }, fail)
-    socket.emit('join-room', { name, password })
+    socket.emit('join-room', { name, password, editor_name, editor_color })
   }
 
   if (mode === 'home') {
     return <HomeScreen onCreate={() => goTo('create')} onJoin={() => goTo('join')} notice={notice} />
+  }
+
+  if (mode === 'identity') {
+    return <IdentityForm onDone={finishIdentity} />
   }
 
   if (mode === 'create') {

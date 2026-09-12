@@ -4,6 +4,10 @@ import './room-settings.css'
 import { socket, emitWrite } from '../../socket'
 import { subscribeToPush, getCurrentSubscription } from '../../push'
 import type { Room } from '../../types'
+import {
+  getIdentity, getRoomOverride, setGlobalIdentity, setRoomOverride, clearRoomOverride, IDENTITY_COLORS,
+} from '../identity/identity'
+import '../identity/identity.css'
 
 interface Props {
   room: Room
@@ -66,6 +70,11 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
   const [eventColors, setEventColors] = useState<string[]>(room.event_colors ?? [])
   const [timezone, setTimezone] = useState(room.timezone)
 
+  const currentIdentity = getIdentity(room.name)
+  const [identityName, setIdentityName] = useState(currentIdentity.name)
+  const [identityColor, setIdentityColor] = useState(currentIdentity.color)
+  const [onlyThisRoom, setOnlyThisRoom] = useState(getRoomOverride(room.name) !== null)
+
   function change(key: keyof typeof colors, value: string) {
     setColors(prev => ({ ...prev, [key]: value }))
   }
@@ -92,6 +101,13 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
     // realmente cambió, para no generar tráfico/broadcast de más.
     if (timezone !== room.timezone) {
       emitWrite('update-room-timezone', { name: room.name, timezone })
+    }
+    const identity = { name: identityName.trim() || 'Invitado', color: identityColor }
+    if (onlyThisRoom) {
+      setRoomOverride(room.name, identity)
+    } else {
+      setGlobalIdentity(identity)
+      clearRoomOverride(room.name)
     }
     onClose()
   }
@@ -229,6 +245,49 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
           <button style={{ background: colors.primary_color, color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '8px', cursor: 'default', fontSize: '0.9rem' }}>
             Botón primario
           </button>
+        </div>
+
+        <div className="settings-section">
+          <span className="settings-presets-label">Tu identidad</span>
+          <p className="settings-notify-text" style={{ fontSize: '0.76rem', color: 'var(--muted)', margin: '0.35rem 0 0.65rem' }}>
+            Nombre y color con los que te ven las demás personas de la sala — no es una cuenta, solo para identificarte.
+          </p>
+          <input
+            type="text"
+            value={identityName}
+            onChange={e => setIdentityName(e.target.value)}
+            placeholder="Tu nombre"
+            maxLength={40}
+          />
+          <div className="identity-colors" style={{ marginTop: '0.6rem' }}>
+            {IDENTITY_COLORS.map(c => (
+              <button
+                key={c}
+                type="button"
+                className={`identity-color-swatch${identityColor === c ? ' identity-color-swatch--on' : ''}`}
+                style={{ background: c }}
+                onClick={() => setIdentityColor(c)}
+                aria-label={`Color ${c}`}
+                aria-pressed={identityColor === c}
+              />
+            ))}
+          </div>
+          <div className="settings-notify-row" style={{ marginTop: '0.7rem' }}>
+            <div className="settings-notify-text">
+              <strong>Solo en esta sala</strong>
+              <p>Si lo desactivas, este nombre y color se usan en todas tus salas.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={onlyThisRoom}
+              className={`toggle-switch${onlyThisRoom ? ' toggle-switch--on' : ''}`}
+              onClick={() => setOnlyThisRoom(v => !v)}
+              aria-label="Usar esta identidad solo en esta sala"
+            >
+              <span className="toggle-switch-thumb" />
+            </button>
+          </div>
         </div>
 
         <div className="settings-section">
