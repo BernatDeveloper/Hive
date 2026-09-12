@@ -19,6 +19,7 @@ export const MAX = {
   noteBody: 100_000,
   pushEndpoint: 1000,
   pushKey: 500,
+  timezone: 60,
 }
 
 const RECURRENCE_RULES = new Set([

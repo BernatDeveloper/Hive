@@ -44,9 +44,17 @@ export function registerEventHandlers(io, socket) {
     const offsetChanged = (safeEvent.reminder_offset ?? null) !== before.reminder_offset
     const resetOne = (ev) => { resetReminderSent(ev.id); return { ...ev, reminder_sent: 0 } }
 
-    // Evento único (o instancia con scope 'single'): edición normal.
+    // Evento único: concurrencia optimista por expected_updated_at (si el
+    // cliente lo manda). Las ramas de serie/instancia de abajo siguen en
+    // last-write-wins.
     if (!before.recurrence_id) {
-      let updated = updateEvent(safeEvent)
+      const result = updateEvent(safeEvent)
+      if (result.status === 'not-found') return
+      if (result.status === 'conflict') {
+        socket.emit('event-conflict', { current: result.current }) // solo al emisor
+        return
+      }
+      let updated = result.event
       if (updated.start !== before.start || offsetChanged) updated = resetOne(updated)
       broadcast(io, room, 'event-updated', updated)
       return

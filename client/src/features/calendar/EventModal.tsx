@@ -8,13 +8,18 @@ import {
   dayOfWeekName, formatDateShort, buildEventDates,
 } from './dateUtils'
 
+// Payload de guardado de un evento único existente: además de los campos del
+// evento, lleva la versión sobre la que se abrió el modal, para que el
+// servidor pueda detectar una edición concurrente (ver useEvents/Calendar).
+export type EventSavePayload = Partial<Event> & { expected_updated_at?: string }
+
 interface Props {
   event?: Partial<Event>
   start?: string
   end?: string
   paletteColors: string[]
   primaryColor: string
-  onSave: (event: Partial<Event>, scope?: RecurrenceScope) => void
+  onSave: (event: EventSavePayload, scope?: RecurrenceScope) => void
   onDelete: (id: string, scope?: RecurrenceScope) => void
   onClose: () => void
 }
@@ -134,6 +139,10 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
         : (recurrence === 'none' ? null : recurrence),
       recurrence_id: event?.recurrence_id ?? null,
       reminder_offset: reminderOffset,
+      // Solo tiene sentido al editar (no hay versión previa que proteger al
+      // crear). El servidor la ignora si el evento resulta ser parte de una
+      // serie (esas ramas siguen en last-write-wins).
+      ...(isEdit ? { expected_updated_at: event?.updated_at } : {}),
     })
   }
 

@@ -5,8 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rmSync } from 'node:fs'
 
-process.env.VAPID_PUBLIC_KEY ||= 'test-public-key'
-process.env.VAPID_PRIVATE_KEY ||= 'test-private-key'
+// Par de claves VAPID de mentira pero con el formato real (65/32 bytes
+// decodificados) que exige `web-push.setVapidDetails` — cualquier valor con
+// una forma inválida hace que config/webpush.js explote al importarse.
+process.env.VAPID_PUBLIC_KEY ||= 'BFiyc-DY9k8K-c5L98qzyQd_f8X44zT2X8z-KS6MEKGw0qZzRAuEifBVkkSnfCDIQxcdz8ZgawZasndGxPSn_8I'
+process.env.VAPID_PRIVATE_KEY ||= 'OChKaASx7P4IKKhKy1Rnk8BZor-gAyn7gACg-faetEM'
 process.env.VAPID_SUBJECT ||= 'mailto:test@example.com'
 process.env.TRUST_PROXY = 'true' // los tests falsean X-Forwarded-For para el rate limit
 process.env.LOG_LEVEL = 'error'  // silencio en la salida de los tests

@@ -320,7 +320,40 @@ elimina de raíz sin migración.
 
 ---
 
-# Fase 8 — Tiempo y concurrencia
+# Fase 8 — Tiempo y concurrencia ✅ HECHA
+
+> **Completada.** 8.1 y 8.2 implementadas tal cual se especifican, con estas
+> notas de implementación:
+> - `nextTimestamp` y `zonedWallTimeToInstant`/`tzOffsetMs`/`isValidTimeZone`
+>   viven juntos en `server/lib/time.js` (tal como sugería 8.2, "de 8.1");
+>   `db/notes.js` también pasó a importar `nextTimestamp` de ahí (antes era
+>   una copia local).
+> - `effectiveStart` se exportó desde `services/reminders.js` para poder
+>   testearla sin levantar el servidor completo. Al importarla directamente
+>   en un test se disparó `config/webpush.js` (`setVapidDetails`), que
+>   **rechaza** las claves VAPID de mentira que usaba `test/setup.js`
+>   (`'test-public-key'`/`'test-private-key'` no son un par EC P-256 válido).
+>   Nadie lo había notado porque ningún test había importado `services/reminders.js`
+>   directamente hasta ahora. Arreglado generando un par de claves con forma
+>   real (`web-push.generateVAPIDKeys()`) para el fixture de test — más
+>   robusto que reestructurar el módulo para esquivar el side-effect.
+> - `useRoomStyle.ts` sustituía la sala entera al recibir `style-updated`
+>   (payload parcial, sin `created_at`/`timezone`) — un bug latente que se
+>   volvía activo en cuanto `timezone` pasó a ser un campo real: cualquier
+>   cambio de color habría borrado la zona horaria del estado local hasta la
+>   próxima reconexión. Se arregló fusionando sobre la sala actual (vía un
+>   `ref` que seguía el valor más reciente) en vez de sustituir — necesario
+>   para que 8.1 funcione de verdad, no solo un tipo más preciso.
+> - El conflicto de eventos (`event-conflict`) no puede mostrarse "en el
+>   modal", porque `Calendar.tsx` ya lo cierra al guardar (guardado optimista;
+>   a diferencia de Notas, cuyo editor no se cierra). Se resolvió con un
+>   banner en `Calendar` ("Otra persona cambió «título»…" + "Ver cambios")
+>   que reabre `EventModal` con la versión del servidor.
+> - Servidor: 76 tests en verde (53 + 6 de `lib/time.test.js` + 4 de
+>   `services/reminders.test.js` + 6 de `test/event-concurrency.test.js`, más
+>   2 nuevos en `contract.test.js`). Cliente: 33 tests, build y `tsc` limpios;
+>   sin lint nuevo (los 2 errores pre-existentes de `Lists.tsx`/`Notes.tsx`
+>   siguen igual, fuera de alcance).
 
 ## 8.1 — Zona horaria por sala
 

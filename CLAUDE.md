@@ -63,6 +63,7 @@ proyecto no está desplegado, así que no hay ALTER TABLE que mantener).
 | name | TEXT PK | room name chosen by the user |
 | password_hash | TEXT | scrypt with random salt |
 | created_at | TEXT | ISO datetime |
+| timezone | TEXT | zona IANA (`Intl.supportedValuesOf('timeZone')`); default `'Europe/Madrid'`. Gobierna cuándo disparan los recordatorios push — el display del calendario no cambia |
 
 ### Tabla `room_style`
 | column | type | notes |
@@ -91,7 +92,7 @@ proyecto no está desplegado, así que no hay ALTER TABLE que mantener).
 | recurrence_id | TEXT | nullable; UUID compartido por todas las instancias de una serie (comparten también `color`) |
 | reminder_offset | INTEGER | nullable; minutos de antelación del recordatorio push |
 | reminder_sent | INTEGER | 0/1; evita reenviar el mismo recordatorio |
-| updated_at | TEXT | updated on each write, used for cleanup |
+| updated_at | TEXT | ISO con milisegundos y `Z` (`toISOString()`), estrictamente creciente (`nextTimestamp`) — testigo de versión para la concurrencia optimista del evento único, además de usarse para cleanup |
 
 No existe columna `category`: se eliminó por completo (el color es el único eje de clasificación de un evento — ver "Colores de evento").
 
@@ -129,11 +130,12 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 
 | Client emits | Payload | Server responds |
 |--------------|---------|-----------------|
-| `create-room` | `{ name, password }` | `room-created` / `room-error` |
+| `create-room` | `{ name, password, timezone? }` | `room-created` / `room-error`. `timezone` = `Intl.DateTimeFormat().resolvedOptions().timeZone` del creador; si falta o es inválida, `'Europe/Madrid'` |
 | `join-room` | `{ name, password }` | `access-granted` / `access-denied` |
 | `update-room-style` | `{ name, styles }` | `style-updated` (room broadcast) |
+| `update-room-timezone` | `{ name, timezone }` | `room-timezone-updated` (`{ name, timezone }`, room broadcast). Evento propio, no mezclado con `update-room-style` |
 | `create-event` | `{ room, event }` | `event-created` si es evento único; `events-created` (array) si `event.recurrence_rule` genera una serie |
-| `update-event` | `{ room, event, scope? }` | evento único → `event-updated`. Instancia de serie según `scope`: `single` → `event-updated` (desengancha la instancia); `future` → `series-updated` (`{ events }`, subconjunto con `recurrence_id` nuevo); `all` (defecto) → `series-updated` |
+| `update-event` | `{ room, event, scope? }` | Evento único (sin `recurrence_id`): concurrencia optimista — `event.expected_updated_at` (opcional) es la versión base; si coincide → `event-updated`; si no → `event-conflict` (`{ current }`) **solo al emisor**, sin persistir; sin `expected_updated_at` → last-write-wins (compat). Instancia de serie según `scope` (siempre LWW, sin control de versión): `single` → `event-updated` (desengancha la instancia); `future` → `series-updated` (`{ events }`, subconjunto con `recurrence_id` nuevo); `all` (defecto) → `series-updated` |
 | `delete-event` | `{ room, id, scope? }` | evento único → `event-deleted`. Instancia de serie: `single` → `event-deleted`; `future` → `events-deleted` (`{ ids }`); `all` (defecto) → `series-deleted` (`{ recurrence_id }`). Ack `{ undoToken, label }` (ventana de deshacer) |
 | `create-note` | `{ room, title }` | `note-created` (room broadcast) |
 | `update-note` | `{ room, note: { id, title, body, updated_at } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
@@ -153,7 +155,7 @@ cualquier socket (`sockets/presence.js`).
 ### Payload `access-granted`
 ```typescript
 {
-  room: { name, created_at, primary_color, background_color, text_color, sidebar_color, event_colors: string[] },
+  room: { name, created_at, timezone, primary_color, background_color, text_color, sidebar_color, event_colors: string[] },
   events: Event[],
   lists: List[],
   listItems: ListItem[],
@@ -179,6 +181,51 @@ Al crear un evento con `recurrence_rule !== 'none'`, el servidor (`generateRecur
 - Al editar/borrar una instancia de serie, el `EventModal` ofrece **alcance**: `single` (solo esa — la desengancha: `recurrence_id`/`recurrence_rule` → NULL), `future` (esa y las siguientes por `start` — reciben un `recurrence_id` nuevo, parte la serie) o `all` (defecto — `updateSeries`/`deleteSeries` por `recurrence_id`). Las instancias comparten `color`.
 - El selector de recurrencia solo aparece al crear (no al editar un evento ya existente ni una serie)
 
+## Zona horaria de sala (recordatorios)
+
+Cada sala tiene una `timezone` IANA (`room.timezone`). El **modelo es "hora de
+pared, sin instante fijo"** para el cálculo del recordatorio: `effectiveStart`
+(`server/services/reminders.js`) toma los dígitos de `event.start` (recortados
+a `YYYY-MM-DDTHH:mm`, o `${start}T09:00` si es de día completo) y los
+reinterpreta como esa hora de pared **en la zona de la sala**, vía
+`zonedWallTimeToInstant` (`server/lib/time.js`). Consecuencia deseada: un
+evento "20:00" dispara el push a las 20:00 de la zona configurada, sea cual
+sea — si cambias la zona de la sala, el mismo evento recalcula su instante de
+disparo sin tocar el evento. **El display del calendario no cambia**: sigue
+mostrando la hora de pared tal cual para todos, en cualquier navegador.
+
+- `RoomSettings` tiene un selector de zona (`Intl.supportedValuesOf('timeZone')`)
+  que emite `update-room-timezone`.
+- `getPendingReminderEvents` (`server/db/events.js`) hace `JOIN` con `room`
+  para traer la `timezone` de cada candidato, con una ventana ±18h (más ancha
+  que el propio disparo) para no descartar candidatos de borde antes de que
+  `effectiveStart` los evalúe zone-aware.
+
+## Concurrencia optimista (eventos y notas)
+
+**Notas** (`update-note`) y **eventos únicos** (`update-event` sin
+`recurrence_id`) usan el mismo patrón, por `updated_at`:
+- El cliente guarda con la versión base sobre la que empezó a editar
+  (`baseRef` en `Notes.tsx`; `event.updated_at` al abrir `EventModal`, enviado
+  como `expected_updated_at`)
+- El servidor (`db/notes.js` / `db/events.js`) compara esa versión con la
+  actual:
+  - vigente → aplica y difunde `note-updated`/`event-updated`; avanza la
+    versión con `nextTimestamp` (`server/lib/time.js`, ISO ms estrictamente
+    creciente — dos guardados en el mismo ms no pueden compartir testigo)
+  - obsoleta → **no** aplica; notas responde por **ack** (`{ status: 'conflict', note }`)
+    al emisor; eventos emiten **`event-conflict` (`{ current }`) solo al
+    emisor** (no hay ack en `update-event`)
+  - sin versión base → last-write-wins (compatibilidad)
+- Notas: un editor sin cambios sin guardar adopta en vivo las ediciones ajenas
+  (lector en tiempo real). Eventos: el modal ya se cierra al guardar
+  (optimista), así que el conflicto llega después — `Calendar.tsx` muestra un
+  banner "Otra persona cambió «título»…" con "Ver cambios", que reabre
+  `EventModal` con la versión del servidor (`Calendar.viewConflict`).
+- **Alcance de eventos:** solo la rama de evento único. Las ediciones de serie
+  (`single`/`future`/`all`, con `recurrence_id`) siguen en last-write-wins sin
+  aviso — no llevan `expected_updated_at`.
+
 ## Colores de evento
 
 No hay categorías. Cada sala define su **paleta** de colores de evento en Ajustes (`RoomSettings` → "Colores de eventos", persistida en `room_style.event_colors`). Al crear/editar un evento se elige un color de esa paleta o "Por defecto" (`color: null` → hereda el `primary_color` de la sala). Se usa para:
@@ -195,7 +242,7 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
    - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
 4. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
 5. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
-6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo y **paleta de colores de evento** (guardados en `room_style`)
+6. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo, **paleta de colores de evento** (guardados en `room_style`) y **zona horaria de la sala** (gobierna los recordatorios, no el display)
 7. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
 8. Presencia: el header del Dashboard muestra un punto + número si hay más de un dispositivo conectado a la sala
 9. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
@@ -210,8 +257,8 @@ SocketProvider           # context de estado de conexión
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home/create/join — auth con timeout de red (awaitAuthResponse)
     └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con indicador de presencia)
-        ├── RoomSettings # color modal con presets + preview (emits update-room-style, subscribe-push)
-        ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props
+        ├── RoomSettings # color modal con presets + preview + zona horaria (emits update-room-style, update-room-timezone, subscribe-push)
+        ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente
         │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por color
         │   └── EventModal   # create/edit/delete evento — color de la paleta, recurrencia, hora opcional
         ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props
@@ -219,22 +266,6 @@ SocketProvider           # context de estado de conexión
 ```
 
 - `Calendar`, `Lists` y `Notes` son responsive: por debajo del breakpoint móvil (`useIsMobile`, 640px) muestran un solo panel a la vez (toggle sidebar ↔ detalle/calendario) en vez del layout de dos columnas de escritorio
-
-## Concurrencia en notas (auto-save)
-
-`update-note` usa **concurrencia optimista** por `updated_at`. El editor guarda con
-el `updated_at` de la versión sobre la que empezó a escribir (`baseRef` en `Notes.tsx`);
-el servidor (`db/notes.js`) responde por ack:
-- `ok` → aplica y difunde `note-updated`; el editor avanza su versión base
-- `conflict` → **no** aplica; devuelve la versión actual y el editor muestra un
-  banner "Otra persona editó esta nota" con "Cargar la versión actual"
-- Un editor que **no** tiene cambios sin guardar adopta en vivo las ediciones
-  ajenas (`note-updated`) — funciona como lector en tiempo real
-- `updated_at` de notas se fuerza estrictamente creciente (`nextTimestamp`) para
-  que dos guardados en el mismo ms no compartan testigo de versión
-
-Los eventos no llevan este control: se editan con guardado explícito (modal), no
-auto-save, así que la superficie de colisión es mínima (edición de series → Fase 5).
 
 ## Sistema de colores por sala
 
@@ -266,6 +297,7 @@ interface Event {
   recurrence_rule: RecurrenceRule | null
   recurrence_id: string | null
   reminder_offset: number | null; reminder_sent: 0 | 1
+  updated_at: string   // testigo de versión (concurrencia optimista, evento único)
 }
 
 interface Room {
@@ -273,6 +305,7 @@ interface Room {
   primary_color: string | null; background_color: string | null
   text_color: string | null; sidebar_color: string | null
   event_colors: string[]   // paleta de la sala
+  timezone: string   // zona IANA; gobierna los recordatorios, no el display
 }
 
 interface List {
@@ -306,9 +339,9 @@ interface Note {
 features/
   auth/         RoomEntry, HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
   dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents, dateUtils.ts (helpers de fecha puros extraídos de EventModal: addDaysToDateStr, isoToLocalDate/Time, buildEventDates) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
+  calendar/     Calendar + calendar.css (incluye el banner de conflicto de evento), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }), EventsPanel, options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`), dateUtils.ts (helpers de fecha puros extraídos de EventModal: addDaysToDateStr, isoToLocalDate/Time, buildEventDates) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
   lists/        Lists + lists.css, useLists
-  settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
+  settings/     RoomSettings (colores + selector de zona horaria vía Intl.supportedValuesOf) + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
   notes/        Notes + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note)
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
@@ -351,18 +384,21 @@ config/
 lib/
   logger.js           logger mínimo con niveles (error/warn/info/debug, umbral `LOG_LEVEL`, default info)
   rateLimit.js        createRateLimiter({ windowMs, max }) — ventana deslizante en memoria
+  time.js             zonedWallTimeToInstant/tzOffsetMs (zona horaria de sala), isValidTimeZone, nextTimestamp (ISO ms monótono, compartido por notas y eventos)
+  time.test.js        unit: zonedWallTimeToInstant en varias zonas/estaciones, isValidTimeZone, nextTimestamp
 db/
   connection.js       instancia better-sqlite3 (export `db`) + PRAGMA journal_mode=WAL, foreign_keys=ON
   schema.js           createSchema() — CREATE TABLE IF NOT EXISTS + todos los índices (esquema completo, sin ALTER)
   migrations.js       runMigrations() — stub vacío, reservado para migrar una DB con datos reales en el futuro
   index.js            initDb() = createSchema + runMigrations; closeDb() = wal_checkpoint(TRUNCATE) + db.close(); barrel de las queries
-  rooms.js / events.js / lists.js / notes.js / push.js   queries por dominio
+  rooms.js / events.js / lists.js / notes.js / push.js   queries por dominio (rooms.js: createRoom/verifyRoomAccess/updateRoomTimezone; events.js: updateEvent con concurrencia optimista)
 auth/
   password.js         hashPassword / verifyPassword (scrypt)
 services/
   recurrence.js       generateRecurrenceInstances (+ helpers de fecha) — puro, sin DB
   recurrence.test.js  unit: todas las reglas/horizontes, propagación, spans, hora
-  reminders.js        sendPushToRoom, scheduler de recordatorios (setInterval 60s)
+  reminders.js        effectiveStart (zone-aware, ver "Zona horaria de sala"), sendPushToRoom, scheduler de recordatorios (setInterval 60s)
+  reminders.test.js   unit: effectiveStart para día completo y con hora, distintas zonas
   cleanup.js          cleanInactiveRooms (salas sin actividad > 2 años) + cleanOldEvents (eventos con `end` > 3 años, fila a fila) + startCleanupScheduler (setInterval 24h)
   cleanup.test.js     retención: protege salas con actividad reciente en cualquier tabla, borra inactivas, conserva instancias futuras de una serie vieja
   backup.js           runBackup (VACUUM INTO + poda a 14 copias) + startBackupScheduler (setInterval 24h)
@@ -388,6 +424,7 @@ test/
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
   presence.test.js    presence sube al entrar, baja al salir, get-presence bajo demanda
   undo.test.js        undo de evento/serie/lista(+ítems)/nota; token caducado; undo de otra sala rechazado
+  event-concurrency.test.js   concurrencia optimista de eventos: ok / conflict (event-conflict) / dos editores / LWW sin expected_updated_at / not-found
   contract.test.js    fija la forma exacta de cada objeto/payload que emite el servidor (drift detector vs client/src/types.ts — no hay tipos compartidos automáticos)
 ```
 

@@ -45,6 +45,16 @@ const MAX_EVENT_COLORS = 8
 // Colores que propone "+ Añadir" antes de que el usuario los ajuste.
 const SUGGESTED_COLORS = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff375f', '#ff453a', '#64d2ff', '#ffd60a']
 
+// `Intl.supportedValuesOf` no existe en navegadores muy antiguos (Safari
+// < 15.4): si falta, al menos se ofrece la zona actual del dispositivo.
+const TIMEZONES: string[] = (() => {
+  try {
+    return Intl.supportedValuesOf('timeZone')
+  } catch {
+    return [Intl.DateTimeFormat().resolvedOptions().timeZone]
+  }
+})()
+
 export default function RoomSettings({ room, onClose, onLeave }: Props) {
   const [colors, setColors] = useState({
     primary_color: room.primary_color ?? PRESETS.light.primary_color,
@@ -54,6 +64,7 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
   })
 
   const [eventColors, setEventColors] = useState<string[]>(room.event_colors ?? [])
+  const [timezone, setTimezone] = useState(room.timezone)
 
   function change(key: keyof typeof colors, value: string) {
     setColors(prev => ({ ...prev, [key]: value }))
@@ -77,6 +88,11 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
 
   function save() {
     emitWrite('update-room-style', { name: room.name, styles: { ...colors, event_colors: eventColors } })
+    // Evento propio (no se mezcla con update-room-style): solo se emite si
+    // realmente cambió, para no generar tráfico/broadcast de más.
+    if (timezone !== room.timezone) {
+      emitWrite('update-room-timezone', { name: room.name, timezone })
+    }
     onClose()
   }
 
@@ -188,6 +204,16 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="settings-section">
+          <label className="settings-presets-label" htmlFor="room-timezone">Zona horaria de la sala</label>
+          <select id="room-timezone" value={timezone} onChange={e => setTimezone(e.target.value)}>
+            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+          </select>
+          <p className="settings-notify-text" style={{ fontSize: '0.76rem', color: 'var(--muted)', marginTop: '0.4rem' }}>
+            Gobierna a qué hora llegan los avisos de recordatorio — no cambia cómo se ven las horas en el calendario.
+          </p>
         </div>
 
         <div

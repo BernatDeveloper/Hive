@@ -6,7 +6,7 @@ function makeEvent(overrides: Partial<Event>): Event {
   return {
     id: 'id-1', room: 'sala', title: 'Evento', start: '2026-06-15', end: '2026-06-15',
     description: '', color: null, recurrence_rule: null, recurrence_id: null,
-    reminder_offset: null, reminder_sent: 0,
+    reminder_offset: null, reminder_sent: 0, updated_at: '2026-06-01T00:00:00.000Z',
     ...overrides,
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { socket } from '../../socket'
 import { isColorDark } from '../../shared/color'
 import type { Room } from '../../types'
@@ -32,19 +32,34 @@ function pickColors(room: Room): RoomColors {
 // `access-granted` (reconexión). Deriva las CSS custom properties del Dashboard.
 export function useRoomStyle(room: Room, onUpdateRoom: (room: Room) => void) {
   const [colors, setColors] = useState<RoomColors>(pickColors(room))
+  // `style-updated`/`room-timezone-updated` solo traen un subconjunto de
+  // campos (no toda la sala); un ref con el valor más reciente evita tener
+  // que re-suscribir el efecto en cada cambio de `room` y permite fusionar
+  // en vez de sustituir (perder `created_at`/`timezone` al pisar con un
+  // objeto parcial sería un bug real, no solo un tipo impreciso).
+  const roomRef = useRef(room)
+  useEffect(() => { roomRef.current = room })
 
   useEffect(() => {
-    function apply(updated: Room) {
-      setColors(pickColors(updated))
-      onUpdateRoom(updated)
+    function onStyleUpdated(updated: Omit<Room, 'timezone' | 'created_at'>) {
+      const merged = { ...roomRef.current, ...updated }
+      setColors(pickColors(merged))
+      onUpdateRoom(merged)
     }
-    function onStyleUpdated(updated: Room) { apply(updated) }
-    function onGranted(payload: { room: Room }) { apply(payload.room) }
+    function onTimezoneUpdated(updated: { name: string; timezone: string }) {
+      onUpdateRoom({ ...roomRef.current, timezone: updated.timezone })
+    }
+    function onGranted(payload: { room: Room }) {
+      setColors(pickColors(payload.room))
+      onUpdateRoom(payload.room)
+    }
 
     socket.on('style-updated', onStyleUpdated)
+    socket.on('room-timezone-updated', onTimezoneUpdated)
     socket.on('access-granted', onGranted)
     return () => {
       socket.off('style-updated', onStyleUpdated)
+      socket.off('room-timezone-updated', onTimezoneUpdated)
       socket.off('access-granted', onGranted)
     }
   }, [onUpdateRoom])

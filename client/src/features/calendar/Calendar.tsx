@@ -7,6 +7,7 @@ import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import esLocale from '@fullcalendar/core/locales/es'
 import type { Event, RecurrenceScope } from '../../types'
 import EventModal from './EventModal'
+import type { EventSavePayload } from './EventModal'
 import EventsPanel from './EventsPanel'
 import { readableTextColor } from '../../shared/color'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -16,9 +17,11 @@ interface Props {
   roomName: string
   primaryColor?: string
   paletteColors: string[]
+  conflict: Event | null
   onCreateEvent: (data: Partial<Event>) => void
-  onUpdateEvent: (data: Partial<Event>, scope?: RecurrenceScope) => void
+  onUpdateEvent: (data: EventSavePayload, scope?: RecurrenceScope) => void
   onDeleteEvent: (id: string, scope?: RecurrenceScope) => void
+  onDismissConflict: () => void
 }
 
 interface ModalState {
@@ -28,7 +31,7 @@ interface ModalState {
   end?: string
 }
 
-export default function Calendar({ events, roomName, primaryColor = '#0071E3', paletteColors, onCreateEvent, onUpdateEvent, onDeleteEvent }: Props) {
+export default function Calendar({ events, roomName, primaryColor = '#0071E3', paletteColors, conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [mobileView, setMobileView] = useState<'calendar' | 'events'>('calendar')
   const isMobile = useIsMobile()
@@ -42,7 +45,17 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
     if (event) setModal({ open: true, event })
   }
 
-  function save(data: Partial<Event>, scope?: RecurrenceScope) {
+  // El modal ya se cerró (guardado optimista) cuando puede llegar el aviso de
+  // conflicto — reabrirlo con la versión del servidor es la forma de aplicar
+  // "cargar la versión actual" aquí (a diferencia de Notas, cuyo editor no se
+  // cierra al guardar).
+  function viewConflict() {
+    if (!conflict) return
+    setModal({ open: true, event: conflict })
+    onDismissConflict()
+  }
+
+  function save(data: EventSavePayload, scope?: RecurrenceScope) {
     if (data.id) {
       onUpdateEvent(data, scope)
     } else {
@@ -76,6 +89,14 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
 
   return (
     <div className="calendar-container">
+      {conflict && (
+        <div className="event-conflict-banner" role="alert">
+          <span>Otra persona cambió «{conflict.title}» mientras lo editabas.</span>
+          <button className="btn-secondary" onClick={viewConflict}>Ver cambios</button>
+          <button className="btn-ghost btn-icon" onClick={onDismissConflict} aria-label="Descartar aviso">✕</button>
+        </div>
+      )}
+
       {isMobile && (
         <div className="calendar-view-toggle">
           <button

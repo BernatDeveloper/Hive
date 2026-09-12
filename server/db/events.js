@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { db } from './connection.js'
+import { nextTimestamp } from '../lib/time.js'
 
 const VALID_REMINDER_OFFSETS = new Set([5, 15, 30, 60, 120, 1440, 2880])
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -29,10 +30,14 @@ export function createEvent(room, event) {
     ...event,
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+    // ISO con "T"/"Z" explícito (no datetime('now'), que da "YYYY-MM-DD HH:MM:SS"
+    // sin zona): updateEvent() compara este valor como testigo de versión, y los
+    // dos formatos no comparan bien entre sí.
+    updated_at: new Date().toISOString(),
   }
   db.prepare(`
     INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @updated_at)
   `).run(newEvent)
   return db.prepare('SELECT * FROM event WHERE id = ?').get(id)
 }
@@ -40,13 +45,14 @@ export function createEvent(room, event) {
 export function createEventsBatch(room, instances) {
   const insert = db.prepare(`
     INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @updated_at)
   `)
   const withRoom = instances.map(ev => ({
     ...ev,
     room,
     color: sanitizeColor(ev.color),
     reminder_offset: sanitizeReminderOffset(ev.reminder_offset),
+    updated_at: new Date().toISOString(),
   }))
   db.transaction(evs => { for (const ev of evs) insert.run(ev) })(withRoom)
   // Todas comparten recurrence_id (generateRecurrenceInstances). Re-SELECT para
@@ -54,20 +60,33 @@ export function createEventsBatch(room, instances) {
   return db.prepare('SELECT * FROM event WHERE recurrence_id = ? ORDER BY start ASC').all(withRoom[0].recurrence_id)
 }
 
+// Concurrencia optimista (solo evento único, sin recurrence_id — ver
+// sockets/events.js): si `event.expected_updated_at` viene y no coincide con
+// el `updated_at` actual, es un guardado sobre una versión obsoleta → no se
+// aplica y se devuelve la versión buena para reconciliar en el cliente. Sin
+// `expected_updated_at` → last-write-wins (compatibilidad). Mismo contrato que
+// updateNote(). Las ramas de serie/instancia (updateSeries/updateSeriesFuture/
+// updateEventDetach) NO llevan este control todavía y siguen en LWW.
 export function updateEvent(event) {
+  const current = db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
+  if (!current) return { status: 'not-found' }
+  if (event.expected_updated_at != null && event.expected_updated_at !== current.updated_at) {
+    return { status: 'conflict', current }
+  }
   const safe = {
     ...event,
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
+    updated_at: nextTimestamp(current.updated_at),
   }
   db.prepare(`
     UPDATE event
     SET title = @title, start = @start, end = @end,
         description = @description, color = @color,
-        reminder_offset = @reminder_offset, updated_at = datetime('now')
+        reminder_offset = @reminder_offset, updated_at = @updated_at
     WHERE id = @id
   `).run(safe)
-  return db.prepare('SELECT * FROM event WHERE id = ?').get(event.id)
+  return { status: 'ok', event: db.prepare('SELECT * FROM event WHERE id = ?').get(event.id) }
 }
 
 function seriesFields(event) {
@@ -149,15 +168,22 @@ export function restoreEvents(rows) {
 
 // --- Recordatorios (flag reminder_sent sobre la tabla event) ---
 
+// Candidatos a recordatorio próximos, con la zona horaria de su sala (el
+// disparo real lo decide `effectiveStart` en services/reminders.js, ya
+// zone-aware). La ventana aquí es deliberadamente amplia (±18h) porque
+// filtra por `start` en hora de pared comparado contra límites en UTC: una
+// zona puede desplazar hasta ±14h, así que hay que dejar margen para no
+// descartar candidatos de borde antes de que effectiveStart los evalúe.
 export function getPendingReminderEvents() {
   const now = Date.now()
   const horizon = new Date(now + 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString()
-  const past = new Date(now - 6 * 60 * 60 * 1000).toISOString()
+  const past = new Date(now - 18 * 60 * 60 * 1000).toISOString()
   return db.prepare(`
-    SELECT id, room, title, start, reminder_offset
-    FROM event
-    WHERE reminder_offset IS NOT NULL AND reminder_sent = 0
-      AND start <= ? AND start >= ?
+    SELECT e.id, e.room, e.title, e.start, e.reminder_offset, r.timezone
+    FROM event e
+    JOIN room r ON r.name = e.room
+    WHERE e.reminder_offset IS NOT NULL AND e.reminder_sent = 0
+      AND e.start <= ? AND e.start >= ?
   `).all(horizon, past)
 }
 

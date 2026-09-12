@@ -18,6 +18,28 @@
   padding: 1.25rem 1.5rem 0;
 }
 
+/* ── Aviso de conflicto (evento editado por otra persona) ── */
+.event-conflict-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 149, 0, 0.12);
+  border: 1px solid rgba(255, 149, 0, 0.35);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.event-conflict-banner span { flex: 1; min-width: 160px; }
+.event-conflict-banner button { flex-shrink: 0; font-size: 0.78rem; padding: 0.35rem 0.7rem; }
+
+@media (max-width: 640px) {
+  .event-conflict-banner { margin: 0.75rem 1rem 0; }
+}
+
 /* ── Mobile view toggle ── */
 .calendar-view-toggle {
   display: flex;

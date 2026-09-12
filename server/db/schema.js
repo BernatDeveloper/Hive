@@ -9,7 +9,8 @@ export function createSchema() {
     CREATE TABLE IF NOT EXISTS room (
       name TEXT PRIMARY KEY,
       password_hash TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (datetime('now')),
+      timezone TEXT NOT NULL DEFAULT 'Europe/Madrid'
     )
   `)
 

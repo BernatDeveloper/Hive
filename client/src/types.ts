@@ -25,6 +25,7 @@ export interface Event {
   recurrence_id: string | null
   reminder_offset: number | null
   reminder_sent: 0 | 1
+  updated_at: string   // testigo de versión para la concurrencia optimista (evento único)
 }
 
 export interface Room {
@@ -34,6 +35,7 @@ export interface Room {
   text_color: string | null
   sidebar_color: string | null
   event_colors: string[]   // paleta de colores de evento definida en Ajustes
+  timezone: string   // zona IANA; gobierna cuándo disparan los recordatorios, no el display
   created_at?: string
 }
 

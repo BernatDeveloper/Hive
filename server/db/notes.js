@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { db } from './connection.js'
+import { nextTimestamp } from '../lib/time.js'
 
 export function getNotes(room) {
   return db.prepare('SELECT * FROM note WHERE room = ? ORDER BY updated_at DESC').all(room)
@@ -12,14 +13,6 @@ export function createNote(room, title) {
     'INSERT INTO note (id, room, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(id, room, title, '', now, now)
   return { id, room, title, body: '', created_at: now, updated_at: now }
-}
-
-// `updated_at` es también el testigo de versión para la concurrencia optimista,
-// así que tiene que ser estrictamente creciente: dos ediciones en el mismo ms no
-// pueden compartir sello (rompería el control de conflicto).
-function nextTimestamp(prev) {
-  const now = new Date().toISOString()
-  return now > prev ? now : new Date(new Date(prev).getTime() + 1).toISOString()
 }
 
 // Concurrencia optimista: si `note.expected_updated_at` viene y no coincide con

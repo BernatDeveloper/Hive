@@ -1,5 +1,5 @@
 import {
-  createRoom, verifyRoomAccess, updateRoomStyle,
+  createRoom, verifyRoomAccess, updateRoomStyle, updateRoomTimezone,
   getEvents, getLists, getListItems, getNotes,
 } from '../db/index.js'
 import { config } from '../config/env.js'
@@ -29,13 +29,13 @@ function tooManyAttempts(socket) {
 }
 
 export function registerRoomHandlers(io, socket) {
-  safeOn(socket, 'create-room', 'room-error', 'No se pudo crear la sala', async ({ name, password }) => {
+  safeOn(socket, 'create-room', 'room-error', 'No se pudo crear la sala', async ({ name, password, timezone }) => {
     if (tooManyAttempts(socket)) return socket.emit('room-error', RATE_LIMITED)
     if (!str(name, MAX.roomName) || !str(password, MAX.password)) return
     if (password.length < MIN_PASSWORD) {
       return socket.emit('room-error', `La contraseña debe tener al menos ${MIN_PASSWORD} caracteres`)
     }
-    const result = await createRoom(name, password)
+    const result = await createRoom(name, password, timezone)
     if (!result.ok) {
       socket.emit('room-error', result.error)
       return
@@ -69,5 +69,14 @@ export function registerRoomHandlers(io, socket) {
     if (!isObject(styles)) return
     const updatedRoom = updateRoomStyle(name, styles)
     broadcast(io, name, 'style-updated', updatedRoom)
+  })
+
+  // Evento propio (no se mezcla con update-room-style): cambia la zona de la
+  // sala, que solo afecta al instante en que disparan los recordatorios push.
+  safeOn(socket, 'update-room-timezone', 'room-error', 'No se pudo actualizar la zona horaria', ({ name, timezone }) => {
+    if (!str(name, MAX.roomName) || !isAuthedFor(socket, name)) return
+    if (!str(timezone, MAX.timezone)) return
+    const updated = updateRoomTimezone(name, timezone)
+    broadcast(io, name, 'room-timezone-updated', updated)
   })
 }

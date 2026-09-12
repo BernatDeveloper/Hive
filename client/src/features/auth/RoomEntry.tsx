@@ -62,7 +62,8 @@ export default function RoomEntry({ onEnter, notice }: Props) {
       },
       'room-error': (msg) => fail(msg as string),
     }, fail)
-    socket.emit('create-room', { name, password })
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    socket.emit('create-room', { name, password, timezone })
   }
 
   function handleJoin(name: string, password: string) {

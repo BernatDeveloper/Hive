@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { socket, emitWrite, emitWriteAck } from '../../socket'
 import type { Event, RecurrenceScope, UndoOffer } from '../../types'
+import type { EventSavePayload } from './EventModal'
 
 // Estado de eventos del calendario: eventos únicos y series recurrentes.
 // Refresca la lista entera desde `access-granted` (reconexión).
 export function useEvents(room: string, initial: Event[]) {
   const [events, setEvents] = useState<Event[]>(initial)
+  // Evento único editado por otra persona mientras lo teníamos abierto: el
+  // servidor avisa solo al emisor (event-conflict), no a toda la sala.
+  const [conflict, setConflict] = useState<Event | null>(null)
 
   useEffect(() => {
     // Dedupe en las altas: `undo-delete` re-emite event(s)-created para restaurar.
@@ -29,6 +33,7 @@ export function useEvents(room: string, initial: Event[]) {
       setEvents(prev => prev.filter(e => !gone.has(e.id)))
     }
     function onGranted(payload: { events: Event[] }) { setEvents(payload.events) }
+    function onConflict({ current }: { current: Event }) { setConflict(current) }
 
     socket.on('event-created', onCreated)
     socket.on('event-updated', onUpdated)
@@ -38,6 +43,7 @@ export function useEvents(room: string, initial: Event[]) {
     socket.on('series-deleted', onSeriesDeleted)
     socket.on('events-deleted', onEventsDeleted)
     socket.on('access-granted', onGranted)
+    socket.on('event-conflict', onConflict)
     return () => {
       socket.off('event-created', onCreated)
       socket.off('event-updated', onUpdated)
@@ -47,13 +53,16 @@ export function useEvents(room: string, initial: Event[]) {
       socket.off('series-deleted', onSeriesDeleted)
       socket.off('events-deleted', onEventsDeleted)
       socket.off('access-granted', onGranted)
+      socket.off('event-conflict', onConflict)
     }
   }, [])
 
   return {
     events,
+    conflict,
+    dismissConflict: () => setConflict(null),
     createEvent: (data: Partial<Event>) => emitWrite('create-event', { room, event: data }),
-    updateEvent: (data: Partial<Event>, scope?: RecurrenceScope) =>
+    updateEvent: (data: EventSavePayload, scope?: RecurrenceScope) =>
       emitWrite('update-event', { room, event: data, scope }),
     deleteEvent: (id: string, scope?: RecurrenceScope): Promise<UndoOffer> =>
       emitWriteAck<UndoOffer>('delete-event', { room, id, scope }, {}),

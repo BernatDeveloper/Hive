@@ -94,9 +94,11 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             roomName={room.name}
             primaryColor={colors.primary_color ?? '#0071E3'}
             paletteColors={eventColors}
+            conflict={cal.conflict}
             onCreateEvent={cal.createEvent}
             onUpdateEvent={cal.updateEvent}
             onDeleteEvent={(id, scope) => { cal.deleteEvent(id, scope).then(undo.offer) }}
+            onDismissConflict={cal.dismissConflict}
           />
         )}
         {activeModule === 'lists' && (

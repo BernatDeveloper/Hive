@@ -9,7 +9,7 @@ import { startTestServer, connect, once, emitAck } from './helpers.js'
 
 // Claves de cada tipo, tal como las declara client/src/types.ts
 const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at']
-const ROOM_KEYS = ['name', 'created_at', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors']
+const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors']
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
 const NOTE_KEYS = ['id', 'room', 'title', 'body', 'created_at', 'updated_at']
@@ -80,6 +80,26 @@ test('style-updated: claves de room', async () => {
   s.emit('update-room-style', { name, styles: { primary_color: '#123456', background_color: null, text_color: null, sidebar_color: null, event_colors: ['#ff0000'] } })
   const st = await once(s, 'style-updated')
   sameKeys(st, ['name', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors'], 'style-updated')
+})
+
+test('room-timezone-updated: claves', async () => {
+  const { s, name } = await room('10.70.0.8')
+  s.emit('update-room-timezone', { name, timezone: 'Atlantic/Canary' })
+  const st = await once(s, 'room-timezone-updated')
+  assert.deepEqual(keysOf(st), ['name', 'timezone'])
+  assert.equal(st.timezone, 'Atlantic/Canary')
+})
+
+test('event-conflict: claves cuando expected_updated_at no coincide', async () => {
+  const { s, name } = await room('10.70.0.9')
+  s.emit('create-event', { room: name, event: { title: 'E', start: '2026-08-01', end: '2026-08-01' } })
+  const created = await once(s, 'event-created')
+
+  const conflictP = once(s, 'event-conflict')
+  s.emit('update-event', { room: name, event: { ...created, title: 'x', expected_updated_at: 'versión-que-no-es' } })
+  const payload = await conflictP
+  assert.deepEqual(keysOf(payload), ['current'])
+  sameKeys(payload.current, EVENT_KEYS, 'event-conflict.current')
 })
 
 test('delete-event ack: { undoToken, label }', async () => {

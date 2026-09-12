@@ -1,13 +1,17 @@
 import webpush from '../config/webpush.js'
 import { getPendingReminderEvents, markReminderSent } from '../db/events.js'
 import { getRoomSubscriptions, deletePushSubscription } from '../db/push.js'
+import { zonedWallTimeToInstant } from '../lib/time.js'
 import { logger } from '../lib/logger.js'
 
-// Hora efectiva del evento: si es fecha sin hora ("YYYY-MM-DD"), 09:00 locales.
-function effectiveStart(ev) {
+// Hora efectiva del evento, interpretada en la zona de la sala: si es fecha
+// sin hora ("YYYY-MM-DD"), 09:00 de esa zona; si tiene hora, esa hora de
+// pared (recortada a minutos) en esa zona. El display del calendario no
+// cambia — esto solo gobierna cuándo dispara el push.
+export function effectiveStart(ev, timeZone) {
   const isDateOnly = ev.start.length === 10
-  const iso = isDateOnly ? `${ev.start}T09:00:00` : ev.start
-  return new Date(iso).getTime()
+  const wall = isDateOnly ? `${ev.start}T09:00` : ev.start.slice(0, 16)
+  return zonedWallTimeToInstant(wall, timeZone)
 }
 
 function reminderBody(minutes) {
@@ -39,7 +43,7 @@ function runReminderTick() {
   try {
     const now = Date.now()
     for (const ev of getPendingReminderEvents()) {
-      const fireTime = effectiveStart(ev) - ev.reminder_offset * 60_000
+      const fireTime = effectiveStart(ev, ev.timezone) - ev.reminder_offset * 60_000
       if (now >= fireTime && now - fireTime < 6 * 60 * 60_000) {
         sendPushToRoom(ev.room, {
           title: ev.title,
