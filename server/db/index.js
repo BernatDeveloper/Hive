@@ -1,3 +1,4 @@
+import { db } from './connection.js'
 import { createSchema } from './schema.js'
 import { runMigrations } from './migrations.js'
 
@@ -5,6 +6,13 @@ import { runMigrations } from './migrations.js'
 export function initDb() {
   createSchema()
   runMigrations()
+}
+
+// Apagado ordenado: fuerza el checkpoint del WAL a la DB principal antes de
+// cerrar, para no depender de que el próximo arranque lo haga por nosotros.
+export function closeDb() {
+  db.pragma('wal_checkpoint(TRUNCATE)')
+  db.close()
 }
 
 export * from './rooms.js'

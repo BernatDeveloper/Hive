@@ -23,6 +23,7 @@ export const config = {
   port: process.env.PORT || 3001,
   clientOrigin: process.env.CLIENT_ORIGIN || null, // dominio de producción
   dbPath: process.env.DB_PATH || './calendario.db',
+  backupDir: process.env.BACKUP_DIR || './backups',
   // Confiar en X-Forwarded-For para la IP del cliente (rate limiting). Poner a
   // 'true' SOLO detrás de un proxy inverso propio que reescriba esa cabecera.
   trustProxy: process.env.TRUST_PROXY === 'true',

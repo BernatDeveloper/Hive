@@ -8,7 +8,7 @@ import { startTestServer, connect, once, emitAck } from './helpers.js'
 // no hay tipos compartidos automáticos entre cliente y servidor.
 
 // Claves de cada tipo, tal como las declara client/src/types.ts
-const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'category', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at']
+const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at']
 const ROOM_KEYS = ['name', 'created_at', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors']
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']

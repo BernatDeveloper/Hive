@@ -82,6 +82,14 @@
   border-radius: var(--radius-lg);
 }
 
+.auth-model-notice {
+  margin-top: 1.5rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
 .auth-form-header {
   display: flex;
   flex-direction: column;

@@ -1,7 +1,9 @@
 import { db } from './connection.js'
 
-// Crea las tablas si no existen. Las columnas añadidas a posteriori sobre DBs
-// ya existentes las gestiona runMigrations() (ALTER TABLE).
+// Crea las tablas con el esquema completo. El proyecto no está desplegado y no
+// tiene datos reales, así que el esquema vive entero aquí — sin ALTER TABLE.
+// `runMigrations()` (migrations.js) queda reservado para el día que haga falta
+// migrar una DB con datos.
 export function createSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS room (
@@ -30,10 +32,11 @@ export function createSchema() {
       start TEXT NOT NULL,
       end TEXT NOT NULL,
       description TEXT DEFAULT '',
-      category TEXT DEFAULT 'otro',
       color TEXT,
       recurrence_rule TEXT,
       recurrence_id TEXT,
+      reminder_offset INTEGER,
+      reminder_sent INTEGER DEFAULT 0,
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `)
@@ -84,6 +87,14 @@ export function createSchema() {
       created_at TEXT NOT NULL
     )
   `)
-  // El índice sobre reminder_sent vive en runMigrations(): esa columna se añade
-  // por ALTER TABLE y en una DB nueva aún no existe al ejecutar este bloque.
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_reminder     ON event(reminder_sent, start);
+    CREATE INDEX IF NOT EXISTS idx_event_room         ON event(room);
+    CREATE INDEX IF NOT EXISTS idx_list_room          ON list(room);
+    CREATE INDEX IF NOT EXISTS idx_list_item_room     ON list_item(room);
+    CREATE INDEX IF NOT EXISTS idx_list_item_list     ON list_item(list_id);
+    CREATE INDEX IF NOT EXISTS idx_note_room          ON note(room);
+    CREATE INDEX IF NOT EXISTS idx_push_sub_room      ON push_subscription(room);
+  `)
 }

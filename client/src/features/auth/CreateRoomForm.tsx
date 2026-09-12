@@ -49,7 +49,7 @@ export default function CreateRoomForm({ onBack, onSubmit, error, loading }: Pro
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="mi-sala-familia"
-              maxLength={30}
+              maxLength={60}
               autoFocus
             />
           </label>

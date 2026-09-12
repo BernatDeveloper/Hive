@@ -83,7 +83,6 @@ export function generateRecurrenceInstances(baseEvent, rule) {
       start: s + startTime,
       end: addDays(s, diffDays) + endTime,
       description: baseEvent.description ?? '',
-      category: baseEvent.category ?? 'otro',
       color: baseEvent.color ?? null,
       recurrence_rule: rule,
       recurrence_id: recurrenceId,

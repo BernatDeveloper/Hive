@@ -1,13 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { db } from './connection.js'
 
-const VALID_CATEGORIES = new Set(['otro', 'personal', 'trabajo', 'social', 'cumpleanos', 'vacaciones', 'salud'])
 const VALID_REMINDER_OFFSETS = new Set([5, 15, 30, 60, 120, 1440, 2880])
 const HEX = /^#[0-9a-fA-F]{6}$/
-
-function sanitizeCategory(category) {
-  return VALID_CATEGORIES.has(category) ? category : 'otro'
-}
 
 function sanitizeReminderOffset(offset) {
   return VALID_REMINDER_OFFSETS.has(offset) ? offset : null
@@ -32,26 +27,24 @@ export function createEvent(room, event) {
     id, room, description: '',
     recurrence_rule: null, recurrence_id: null,
     ...event,
-    category: sanitizeCategory(event.category),
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
   }
   db.prepare(`
-    INSERT INTO event (id, room, title, start, end, description, category, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @category, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
+    INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
   `).run(newEvent)
   return db.prepare('SELECT * FROM event WHERE id = ?').get(id)
 }
 
 export function createEventsBatch(room, instances) {
   const insert = db.prepare(`
-    INSERT INTO event (id, room, title, start, end, description, category, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
-    VALUES (@id, @room, @title, @start, @end, @description, @category, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
+    INSERT INTO event (id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, updated_at)
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, datetime('now'))
   `)
   const withRoom = instances.map(ev => ({
     ...ev,
     room,
-    category: sanitizeCategory(ev.category),
     color: sanitizeColor(ev.color),
     reminder_offset: sanitizeReminderOffset(ev.reminder_offset),
   }))
@@ -64,14 +57,13 @@ export function createEventsBatch(room, instances) {
 export function updateEvent(event) {
   const safe = {
     ...event,
-    category: sanitizeCategory(event.category),
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
   }
   db.prepare(`
     UPDATE event
     SET title = @title, start = @start, end = @end,
-        description = @description, category = @category, color = @color,
+        description = @description, color = @color,
         reminder_offset = @reminder_offset, updated_at = datetime('now')
     WHERE id = @id
   `).run(safe)
@@ -81,7 +73,6 @@ export function updateEvent(event) {
 function seriesFields(event) {
   return {
     ...event,
-    category: sanitizeCategory(event.category),
     color: sanitizeColor(event.color),
     reminder_offset: sanitizeReminderOffset(event.reminder_offset),
   }
@@ -91,7 +82,7 @@ function seriesFields(event) {
 export function updateSeries(event) {
   db.prepare(`
     UPDATE event
-    SET title = @title, description = @description, category = @category, color = @color,
+    SET title = @title, description = @description, color = @color,
         reminder_offset = @reminder_offset, updated_at = datetime('now')
     WHERE recurrence_id = @recurrence_id
   `).run(seriesFields(event))
@@ -104,7 +95,7 @@ export function updateSeriesFuture(event, recurrenceId, fromStart) {
   const newRid = randomUUID()
   db.prepare(`
     UPDATE event
-    SET title = @title, description = @description, category = @category, color = @color,
+    SET title = @title, description = @description, color = @color,
         reminder_offset = @reminder_offset, recurrence_id = @newRid, updated_at = datetime('now')
     WHERE recurrence_id = @recurrence_id AND start >= @fromStart
   `).run({ ...seriesFields(event), recurrence_id: recurrenceId, newRid, fromStart })
@@ -116,7 +107,7 @@ export function updateEventDetach(event) {
   db.prepare(`
     UPDATE event
     SET title = @title, start = @start, end = @end,
-        description = @description, category = @category, color = @color,
+        description = @description, color = @color,
         reminder_offset = @reminder_offset,
         recurrence_id = NULL, recurrence_rule = NULL,
         updated_at = datetime('now')
@@ -145,12 +136,12 @@ export function deleteSeriesFuture(recurrenceId, fromStart) {
   return rows
 }
 
-const EVENT_COLS = 'id, room, title, start, end, description, category, color, recurrence_rule, recurrence_id, reminder_offset, reminder_sent, updated_at'
+const EVENT_COLS = 'id, room, title, start, end, description, color, recurrence_rule, recurrence_id, reminder_offset, reminder_sent, updated_at'
 
 export function restoreEvents(rows) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO event (${EVENT_COLS})
-    VALUES (@id, @room, @title, @start, @end, @description, @category, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @reminder_sent, @updated_at)
+    VALUES (@id, @room, @title, @start, @end, @description, @color, @recurrence_rule, @recurrence_id, @reminder_offset, @reminder_sent, @updated_at)
   `)
   db.transaction(rs => { for (const r of rs) insert.run(r) })(rows)
   return rows

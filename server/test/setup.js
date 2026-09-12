@@ -12,10 +12,13 @@ process.env.TRUST_PROXY = 'true' // los tests falsean X-Forwarded-For para el ra
 process.env.LOG_LEVEL = 'error'  // silencio en la salida de los tests
 
 const dbPath = process.env.DB_PATH ||= join(tmpdir(), `sc-test-${process.pid}-${Date.now()}.db`)
+const backupDir = process.env.BACKUP_DIR ||= join(tmpdir(), `sc-test-backups-${process.pid}-${Date.now()}`)
 
-// Borra la DB temporal (y sus sidecars WAL) al terminar el worker de test.
+// Borra la DB temporal (y sus sidecars WAL) y la carpeta de backups al
+// terminar el worker de test.
 process.on('exit', () => {
   for (const suffix of ['', '-wal', '-shm', '-journal']) {
     try { rmSync(dbPath + suffix) } catch { /* no existía */ }
   }
+  try { rmSync(backupDir, { recursive: true, force: true }) } catch { /* no existía */ }
 })

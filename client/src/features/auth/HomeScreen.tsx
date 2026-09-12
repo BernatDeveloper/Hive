@@ -38,6 +38,13 @@ export default function HomeScreen({ onCreate, onJoin, notice }: Props) {
             Unirse a sala existente
           </button>
         </div>
+
+        <p className="auth-model-notice">
+          Sin cuentas: compartes el nombre y la contraseña de la sala con tu
+          grupo. Por eso mismo, guárdalos bien — no hay recuperación. Las
+          salas sin actividad durante 2 años y los eventos de hace más de 3
+          años se eliminan automáticamente.
+        </p>
       </div>
     </div>
   )

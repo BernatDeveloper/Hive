@@ -3,6 +3,10 @@ import '../../shared/modal.css'
 import type { Event, RecurrenceRule, RecurrenceScope } from '../../types'
 import { RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './options'
 import { readableTextColor } from '../../shared/color'
+import {
+  todayDateStr, addDaysToDateStr, isoToLocalDate, isoToLocalTime,
+  dayOfWeekName, formatDateShort, buildEventDates,
+} from './dateUtils'
 
 interface Props {
   event?: Partial<Event>
@@ -20,40 +24,6 @@ const SCOPE_OPTIONS: { value: RecurrenceScope; label: string }[] = [
   { value: 'future', label: 'Este y los siguientes' },
   { value: 'all', label: 'Toda la serie' },
 ]
-
-function todayDateStr(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function addDaysToDateStr(dateStr: string, delta: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const date = new Date(y, m - 1, d)
-  date.setDate(date.getDate() + delta)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-// Un evento con hora se guarda como instante UTC (ISO con "Z"); estas dos
-// funciones lo vuelven a expresar en fecha/hora locales para los inputs.
-function isoToLocalDate(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function isoToLocalTime(iso: string): string {
-  const d = new Date(iso)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function dayOfWeekName(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { weekday: 'long' })
-}
-
-function formatDateShort(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })
-}
 
 const REC_ENTRIES = Object.entries(RECURRENCE_OPTIONS) as [RecurrenceRule, (typeof RECURRENCE_OPTIONS)[RecurrenceRule]][]
 
@@ -150,17 +120,7 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
     if (!startDate) return
     if (showTime && startTime >= endTime) return
 
-    // Con hora: instante real en UTC (ISO con "Z"). Día completo: fecha flotante, sin convertir.
-    const build = (date: string, time: string) => showTime ? new Date(`${date}T${time}`).toISOString() : date
-    const finalStart = build(startDate, startTime)
-    // El input de "Fecha fin" es inclusivo (el último día real del evento),
-    // pero FullCalendar guarda/pinta el fin de los eventos de día completo
-    // como fecha exclusiva (el día siguiente); sumamos uno solo en ese caso.
-    const finalEnd = isRecurring
-      ? build(startDate, endTime)
-      : showTime
-        ? build(endDate, endTime)
-        : addDaysToDateStr(endDate, 1)
+    const { start: finalStart, end: finalEnd } = buildEventDates({ startDate, endDate, startTime, endTime, showTime, isRecurring })
 
     onSave({
       id: event?.id,

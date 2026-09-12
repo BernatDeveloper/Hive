@@ -19,6 +19,9 @@ cd client && pnpm dev
 
 # Tests del servidor (node:test, sin dependencias de test extra salvo socket.io-client)
 cd server && pnpm test
+
+# Tests del cliente (vitest — lógica pura: fechas, iCal, colores, contraseña)
+cd client && pnpm test
 ```
 
 ### Nota Windows: build nativo de better-sqlite3
@@ -41,14 +44,18 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 - Acceso por sala: nombre custom + contraseña obligatoria. Salas **nuevas**: mínimo 8 chars, validado en cliente (`CreateRoomForm` + indicador de fortaleza) y en servidor (`MIN_PASSWORD` en `sockets/validate.js`). `join-room` no re-valida longitud (salas antiguas con contraseñas cortas siguen funcionando)
 - Toda la sincronización es por Socket.io (no REST para datos de app; solo existe `GET /health`)
 - SQLite guarda los datos en `server/calendario.db`
-- Limpieza automática: salas sin actividad en más de 1 año se eliminan al arrancar el servidor y cada 24h
+- Limpieza automática (`server/services/cleanup.js`, `startCleanupScheduler`, al arrancar y cada 24h): salas sin **ninguna** actividad (evento/ítem/nota) en más de **2 años** se eliminan; eventos cuyo `end` quedó hace más de **3 años** se borran fila a fila (nunca por `recurrence_id`, para no arrastrar instancias futuras de una serie con historial viejo)
+- Backup automático (`server/services/backup.js`, `startBackupScheduler`, al arrancar y cada 24h): `VACUUM INTO` a `backups/calendario-YYYY-MM-DD.db` (ruta configurable con `BACKUP_DIR`), conserva las últimas 14 copias
+- Apagado ordenado: `SIGTERM`/`SIGINT` cierran `io` (que cierra el HTTP server), hacen `wal_checkpoint(TRUNCATE)` y `db.close()` (`closeDb()` en `db/index.js`) antes de salir, con un timeout de guardia de 5s
 - CORS de Socket.io: en dev acepta cualquier puerto de `localhost`/`127.0.0.1` (`isOriginAllowed` en `server/config/cors.js`); en producción solo `ALLOWED_ORIGINS` (`CLIENT_ORIGIN`) y `*.vercel.app` — mantener `CLIENT_ORIGIN` en sync con la URL real del cliente
 
 ## Base de datos (SQLite)
 
 Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficheros
-`calendario.db-wal` y `calendario.db-shm` (gitignored). Índices creados en
-`db/migrations.js`.
+`calendario.db-wal` y `calendario.db-shm` (gitignored). El esquema completo
+(tablas + índices) vive en `db/schema.js`; `db/migrations.js` es un stub vacío
+reservado para el día que haga falta migrar una DB con datos reales (hoy el
+proyecto no está desplegado, así que no hay ALTER TABLE que mantener).
 
 ### Tabla `room`
 | column | type | notes |
@@ -79,14 +86,14 @@ Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficher
 | start | TEXT | ISO datetime (con o sin hora) |
 | end | TEXT | ISO datetime |
 | description | TEXT | default '' |
-| category | TEXT | **legacy**, default `'otro'`; el cliente ya no la usa (la migración a `color` la leyó una vez para el backfill). No se borra |
 | color | TEXT | nullable; hex `#rrggbb`. null = hereda el `primary_color` de la sala |
 | recurrence_rule | TEXT | nullable; `daily/weekly/monthly/monthly-first/monthly-last/annual` |
 | recurrence_id | TEXT | nullable; UUID compartido por todas las instancias de una serie (comparten también `color`) |
+| reminder_offset | INTEGER | nullable; minutos de antelación del recordatorio push |
+| reminder_sent | INTEGER | 0/1; evita reenviar el mismo recordatorio |
 | updated_at | TEXT | updated on each write, used for cleanup |
 
-- `server/db/migrations.js` migra automáticamente (`ALTER TABLE`) las columnas `category`, `color`, `recurrence_rule`, `recurrence_id`, `reminder_offset`, `reminder_sent` (event) y `event_colors` (room_style) si faltan
-- Al añadir `event.color` hace **backfill** desde `category` (mapa hex de las categorías antiguas; `'otro'` → null)
+No existe columna `category`: se eliminó por completo (el color es el único eje de clasificación de un evento — ver "Colores de evento").
 
 ### Tabla `list`
 | column | type | notes |
@@ -297,9 +304,9 @@ interface Note {
 
 ```
 features/
-  auth/         RoomEntry, HomeScreen, CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística)
+  auth/         RoomEntry, HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
   dashboard/    Dashboard + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
-  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto)
+  calendar/     Calendar + calendar.css, EventModal, EventsPanel, options.ts (recurrencia/recordatorio), useEvents, dateUtils.ts (helpers de fecha puros extraídos de EventModal: addDaysToDateStr, isoToLocalDate/Time, buildEventDates) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
   lists/        Lists + lists.css, useLists
   settings/     RoomSettings + room-settings.css, useRoomStyle (colors + cssVars)
   notes/        Notes + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note)
@@ -317,7 +324,7 @@ pwa.ts          useServiceWorkerUpdate(): registra el SW, detecta versión en es
 app.css         estilos del banner de actualización
 shared/
   modal.css     estilos base del modal (usado por EventModal y RoomSettings)
-  color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar, EventModal)
+  color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar, EventModal) + color.test.ts
 hooks/
   useIsMobile           breakpoint responsive (default 640px)
 push.ts         helpers de suscripción a Web Push (subscribeToPush, getCurrentSubscription)
@@ -336,9 +343,9 @@ index.css       reset, tokens :root, body, inputs, botones, scrollbars (solo glo
 ## Estructura de archivos (server)
 
 ```
-index.js              bootstrap: env → webpush → initDb → app/io → handlers → schedulers → listen
+index.js              bootstrap: env → webpush → initDb → app/io → handlers → schedulers → listen; SIGTERM/SIGINT → apagado ordenado
 config/
-  env.js              process.loadEnvFile() + valida VAPID_* (falla rápido, exit 1) + objeto `config`
+  env.js              process.loadEnvFile() + valida VAPID_* (falla rápido, exit 1) + objeto `config` (incluye `backupDir`)
   webpush.js          webpush.setVapidDetails con config.vapid
   cors.js             ALLOWED_ORIGINS, isOriginAllowed, corsOrigin (firma (origin, cb))
 lib/
@@ -346,19 +353,23 @@ lib/
   rateLimit.js        createRateLimiter({ windowMs, max }) — ventana deslizante en memoria
 db/
   connection.js       instancia better-sqlite3 (export `db`) + PRAGMA journal_mode=WAL, foreign_keys=ON
-  schema.js           createSchema() — CREATE TABLE IF NOT EXISTS
-  migrations.js       runMigrations() — ALTER TABLE con comprobación + índices (por `room` en event/list/list_item/note/push_subscription, `list_item(list_id)`, `event(reminder_sent,start)`)
-  index.js            initDb() = createSchema + runMigrations; barrel de las queries
+  schema.js           createSchema() — CREATE TABLE IF NOT EXISTS + todos los índices (esquema completo, sin ALTER)
+  migrations.js       runMigrations() — stub vacío, reservado para migrar una DB con datos reales en el futuro
+  index.js            initDb() = createSchema + runMigrations; closeDb() = wal_checkpoint(TRUNCATE) + db.close(); barrel de las queries
   rooms.js / events.js / lists.js / notes.js / push.js   queries por dominio
 auth/
   password.js         hashPassword / verifyPassword (scrypt)
 services/
   recurrence.js       generateRecurrenceInstances (+ helpers de fecha) — puro, sin DB
+  recurrence.test.js  unit: todas las reglas/horizontes, propagación, spans, hora
   reminders.js        sendPushToRoom, scheduler de recordatorios (setInterval 60s)
-  cleanup.js          cleanInactiveRooms + startCleanupScheduler (setInterval 24h)
+  cleanup.js          cleanInactiveRooms (salas sin actividad > 2 años) + cleanOldEvents (eventos con `end` > 3 años, fila a fila) + startCleanupScheduler (setInterval 24h)
+  cleanup.test.js     retención: protege salas con actividad reciente en cualquier tabla, borra inactivas, conserva instancias futuras de una serie vieja
+  backup.js           runBackup (VACUUM INTO + poda a 14 copias) + startBackupScheduler (setInterval 24h)
+  backup.test.js      backup válido y abrible; poda a 14 con 15 presentes
   undo.js             stash/pop — tombstones de borrados en memoria (ventana 12s)
 http/
-  app.js              createApp() — express + cors + json + health
+  app.js              createApp() — express + cors + json (límite 256kb, alineado con MAX.noteBody) + health
   io.js               createIo(httpServer) — new Server con cors de config/cors.js
   health.js           GET /health
 sockets/
@@ -370,7 +381,7 @@ sockets/
   undo.js             `undo-delete` → restaura desde la ventana de `services/undo.js`
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 test/
-  setup.js            --import de `pnpm test`: env de prueba + DB_PATH temporal por proceso (se borra al salir)
+  setup.js            --import de `pnpm test`: env de prueba + DB_PATH y BACKUP_DIR temporales por proceso (se borran al salir)
   helpers.js          startTestServer() (compone app/io/handlers sin index.js ni webpush), connect(), once()
   handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
@@ -378,12 +389,15 @@ test/
   presence.test.js    presence sube al entrar, baja al salir, get-presence bajo demanda
   undo.test.js        undo de evento/serie/lista(+ítems)/nota; token caducado; undo de otra sala rechazado
   contract.test.js    fija la forma exacta de cada objeto/payload que emite el servidor (drift detector vs client/src/types.ts — no hay tipos compartidos automáticos)
-services/recurrence.test.js   unit: generateRecurrenceInstances (todas las reglas/horizontes, propagación, spans, hora)
 ```
 
 - **Tests** (`node:test`, Node 22): `cd server && pnpm test`. `pnpm-workspace.yaml`
   lleva `verifyDepsBeforeRun: false` porque el chequeo previo de pnpm 11 en Windows
   falla con `ERR_PNPM_IGNORED_BUILDS` de better-sqlite3 aunque el `.node` ya exista.
+- **Tests del cliente** (Vitest): `cd client && pnpm test`. Cubren solo lógica
+  pura (sin componentes): `dateUtils.test.ts`, `ics.test.ts`,
+  `password-strength.test.ts`, `color.test.ts`. `vite.config.ts` declara
+  `test.environment: 'node'` (no hace falta DOM para estos).
 
 - **Errores de handler:** cada handler se registra con `safeOn`/`safeAuthedOn`; una
   excepción se loguea (`logger.error('socket:<event>', err)`) y emite su evento de
