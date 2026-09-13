@@ -2,6 +2,10 @@
 // room -> Map<socketId, { name, color }>. En memoria — se reconstruye con
 // cada join, no sobrevive a un reinicio (igual que antes con el conteo).
 
+import { isAuthedFor } from './helpers.js'
+import { safeOn } from './handler.js'
+import { str, isObject, MAX } from './validate.js'
+
 const presenceByRoom = new Map()
 
 const HEX = /^#[0-9a-fA-F]{6}$/
@@ -57,5 +61,16 @@ export function registerPresenceHandlers(io, socket) {
       removePresence(room, socket.id)
       emitPresence(io, room)
     }
+  })
+
+  // Refresco en vivo (MEJORAS-3): al renombrarse en Ajustes, actualiza la
+  // entrada de presencia de este socket y la redifunde. No persiste nada —
+  // la identidad "de verdad" vive en localStorage del cliente. La clave de
+  // sala aquí es `name`, no `room` — mismo caso que update-room-style/-timezone.
+  safeOn(socket, 'update-identity', 'room-error', 'No se pudo actualizar la identidad', ({ name, identity }) => {
+    if (!str(name, MAX.roomName) || !isAuthedFor(socket, name)) return
+    if (!isObject(identity)) return
+    setPresence(name, socket.id, identity.name, identity.color)
+    emitPresence(io, name)
   })
 }

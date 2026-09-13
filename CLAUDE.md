@@ -151,6 +151,7 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | `delete-list-item` | `{ room, id }` | `list-item-deleted` (room broadcast) |
 | `undo-delete` | `{ room, token }` | re-inserta lo borrado y difunde su `*-created`; ack `{ ok, expired? }` |
 | `get-presence` | `—` | `presence` (`{ people: { name, color }[] }`) al emisor |
+| `update-identity` | `{ name, identity: { name, color } }` | `presence` (room broadcast, mismo formato que `get-presence`). Refresca en vivo el nombre/color de este socket en la sala (MEJORAS-3) — no persiste nada, no toca `last_editor_*` de eventos/notas (esos son históricos a propósito) |
 | `subscribe-push` / `unsubscribe-push` | `{ room, subscription }` / `{ endpoint }` | `push-subscribed` / `push-unsubscribed` / `push-error` |
 
 Además, el servidor difunde `presence` (`{ people: { name, color }[] }`) a la
@@ -241,7 +242,11 @@ Nombre + color **por dispositivo**, guardados en `localStorage` (`client/src/fea
 
 ### Presencia con nombres
 
-`server/sockets/presence.js` mantiene en memoria `room → Map<socketId, {name, color}>` (poblado en `join-room`, limpiado en `disconnecting`). El Dashboard muestra hasta 4 avatares con la inicial del nombre (`readableTextColor` para el contraste) + "+N" si hay más, con el listado completo en el `title` (`usePresence` devuelve `PresencePerson[]`, no ya un número).
+`server/sockets/presence.js` mantiene en memoria `room → Map<socketId, {name, color}>` (poblado en `join-room`, limpiado en `disconnecting`, actualizado en vivo por `update-identity`). El Dashboard muestra hasta 4 avatares con la inicial del nombre (`readableTextColor` para el contraste) + "+N" si hay más, con el listado completo en el `title` (`usePresence` devuelve `PresencePerson[]`, no ya un número).
+
+Al renombrarse en `RoomSettings`, el guardado emite `update-identity` (además de persistir en `localStorage`) para que el nuevo nombre se vea sin recargar — tanto en el propio header como en el de las demás pestañas de la sala. **Nota de diseño (Fase 9/MEJORAS-3):** `last_editor_name`/`last_editor_color` de eventos y notas son histórico a propósito (quién hizo esa edición en su momento) — `update-identity` no los toca ni debe tocarlos.
+
+⚠️ **Cabo suelto conocido:** el re-join automático al reconectar (`client/src/socket/client.ts`, `socket.on('connect', ...)`) reemite `join-room` con solo `{ name, password }` — sin `editor_name`/`editor_color`. Tras una reconexión (reinicio del servidor, corte de red), la presencia de ese socket vuelve a `'Invitado'` hasta el siguiente `update-identity`. Documentado en `MEJORAS-3.md` como verificación pendiente; no arreglado todavía.
 
 ### Atribución ("Editado por…")
 
@@ -443,7 +448,7 @@ sockets/
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
   handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; reenvían el ack de socket.io al handler; safeAuthedOn además exige isAuthedFor(payload.room)
   validate.js         MAX (longitudes) + MIN_PASSWORD, str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
-  presence.js         `presence`/`get-presence` con identidad (room → Map<socketId, {name, color}>, poblado por setPresence() en join-room) + handler `disconnecting`
+  presence.js         `presence`/`get-presence`/`update-identity` con identidad (room → Map<socketId, {name, color}>, poblado por setPresence() en join-room y refrescado en vivo por update-identity) + handler `disconnecting`
   undo.js             `undo-delete` → restaura desde la ventana de `services/undo.js`
   rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
 test/
@@ -452,7 +457,7 @@ test/
   handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
-  presence.test.js    presence con nombre/color al entrar y salir; identidad ausente/inválida cae a valores por defecto
+  presence.test.js    presence con nombre/color al entrar y salir; identidad ausente/inválida cae a valores por defecto; update-identity refresca en vivo (uno mismo y el resto) y exige estar autenticado en la sala
   undo.test.js        undo de evento/serie/lista(+ítems)/nota; token caducado; undo de otra sala rechazado
   event-concurrency.test.js   concurrencia optimista de eventos: ok / conflict (event-conflict) / dos editores / LWW sin expected_updated_at / not-found
   attribution.test.js  last_editor_name/color en create/update de eventos (incl. series) y notas; se restaura correctamente con undo

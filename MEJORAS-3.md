@@ -50,7 +50,28 @@ onClose()
 `update-room-style` / `update-room-timezone`: si no hay conexión, se envía al
 reconectar tras `access-granted`.)
 
-## Tarea 2 — Servidor: handler `update-identity`
+## Tarea 2 — Servidor: handler `update-identity` ✅ HECHA
+
+> Implementado tal cual se especifica, reutilizando `setPresence()` (que ya
+> hacía exactamente "actualiza la entrada existente" al hacer `Map.set` sobre
+> un `socketId` que ya estaba en el mapa — no hizo falta tocar el almacén).
+> Autorización igual que `update-room-style`/`update-room-timezone`: `safeOn`
+> + `isAuthedFor(socket, name)` manual (la clave de sala es `name`, no `room`,
+> así que no encaja en `safeAuthedOn`). Tests añadidos en `presence.test.js`:
+> refresco en vivo visible para el propio emisor y para el resto de la sala, y
+> rechazo si el socket no está autenticado en esa sala. Por el camino salió
+> una carrera en el test (el listener de `presence` se registraba después de
+> que el broadcast del *join* ya estaba en vuelo — mismo patrón que el bug de
+> Fase 4 documentado en `MEJORAS.md`) — arreglada drenando esos broadcasts
+> intermedios antes de comprobar el de `update-identity`, no era un bug del
+> servidor. 87 tests en verde.
+>
+> **Verificación adicional (del final del documento): confirmado, es un bug
+> real.** `client/src/socket/client.ts` reemite `join-room` con solo
+> `{ name, password }` al reconectar — sin identidad. Tras un reinicio del
+> servidor o un corte de red, la presencia de ese socket cae a `'Invitado'`
+> hasta el siguiente `update-identity` manual. No corregido en esta tarea
+> (no se pidió) — queda anotado en `CLAUDE.md` como cabo suelto conocido.
 
 **Archivo:** `server/sockets/presence.js` (**leer primero**) y donde se registra
 (`registerPresenceHandlers`).
