@@ -246,7 +246,7 @@ Nombre + color **por dispositivo**, guardados en `localStorage` (`client/src/fea
 
 Al renombrarse en `RoomSettings`, el guardado emite `update-identity` (además de persistir en `localStorage`) para que el nuevo nombre se vea sin recargar — tanto en el propio header como en el de las demás pestañas de la sala. **Nota de diseño (Fase 9/MEJORAS-3):** `last_editor_name`/`last_editor_color` de eventos y notas son histórico a propósito (quién hizo esa edición en su momento) — `update-identity` no los toca ni debe tocarlos.
 
-⚠️ **Cabo suelto conocido:** el re-join automático al reconectar (`client/src/socket/client.ts`, `socket.on('connect', ...)`) reemite `join-room` con solo `{ name, password }` — sin `editor_name`/`editor_color`. Tras una reconexión (reinicio del servidor, corte de red), la presencia de ese socket vuelve a `'Invitado'` hasta el siguiente `update-identity`. Documentado en `MEJORAS-3.md` como verificación pendiente; no arreglado todavía.
+El re-join automático al reconectar (`client/src/socket/client.ts`, `socket.on('connect', ...)`) también manda `editor_name`/`editor_color` — leídos con `getIdentity(currentRoom.name)` en el momento de reconectar (no cacheados junto a `currentRoom`, para no reemitir un nombre desactualizado si el usuario se renombró mientras tanto). Sin esto, tras un reinicio del servidor o un corte de red la presencia de ese socket habría vuelto a `'Invitado'`.
 
 ### Atribución ("Editado por…")
 
@@ -378,7 +378,7 @@ features/
   settings/     RoomSettings (colores + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad") + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
   notes/        Notes (muestra "Editado por…" en la nota seleccionada) + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note, adjunta editor_name/editor_color vía getIdentity)
 socket/
-  client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar
+  client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar (incluye editor_name/editor_color vía getIdentity, leída fresca en cada reconexión)
   queue.ts              cola de escrituras offline: emitWrite / emitWriteAck encolan si no hay conexión y vacían en orden al recibir `access-granted`
   usePendingWrites.ts   hook → nº de escrituras encoladas
   SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')

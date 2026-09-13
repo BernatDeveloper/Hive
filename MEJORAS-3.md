@@ -66,12 +66,18 @@ reconectar tras `access-granted`.)
 > intermedios antes de comprobar el de `update-identity`, no era un bug del
 > servidor. 87 tests en verde.
 >
-> **Verificación adicional (del final del documento): confirmado, es un bug
-> real.** `client/src/socket/client.ts` reemite `join-room` con solo
-> `{ name, password }` al reconectar — sin identidad. Tras un reinicio del
-> servidor o un corte de red, la presencia de ese socket cae a `'Invitado'`
-> hasta el siguiente `update-identity` manual. No corregido en esta tarea
-> (no se pidió) — queda anotado en `CLAUDE.md` como cabo suelto conocido.
+> **Verificación adicional (del final del documento): confirmado y corregido.**
+> `client/src/socket/client.ts` reemitía `join-room` con solo
+> `{ name, password }` al reconectar — sin identidad. Arreglado incluyendo
+> `editor_name`/`editor_color` en ese re-join, leídos con
+> `getIdentity(currentRoom.name)` **en el momento de reconectar** (no
+> cacheados junto a `currentRoom` en `rememberRoom`, para no reemitir un
+> nombre desactualizado si el usuario se renombró entre medias). Sin test
+> automático dedicado (la lógica de reconexión de `socket.io-client` no
+> tiene infraestructura de test en este repo — los tests de cliente son solo
+> de lógica pura); verificado por lectura del código y por los tests de
+> servidor existentes de `update-identity`, que cubren el mismo payload que
+> ahora manda el re-join.
 
 **Archivo:** `server/sockets/presence.js` (**leer primero**) y donde se registra
 (`registerPresenceHandlers`).
