@@ -109,6 +109,9 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
       setGlobalIdentity(identity)
       clearRoomOverride(room.name)
     }
+    // Refresca la presencia en vivo (esta sala): sin esto, el nuevo nombre no
+    // se ve en el header hasta el próximo join-room (p. ej. al recargar).
+    emitWrite('update-identity', { name: room.name, identity })
     onClose()
   }
 
