@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { addDaysToDateStr, isoToLocalDate, isoToLocalTime, dayOfWeekName, formatDateShort, buildEventDates } from './dateUtils'
+import { addDaysToDateStr, isoToLocalDate, isoToLocalTime, dayOfWeekName, formatDateShort, buildEventDates, formatLocalDate, localDateKey } from './dateUtils'
 
 describe('addDaysToDateStr', () => {
   test('cambio de mes hacia adelante', () => {
@@ -42,6 +42,27 @@ describe('dayOfWeekName / formatDateShort', () => {
 
   test('formatDateShort da "día de mes" en español', () => {
     expect(formatDateShort('2026-03-05')).toBe('5 de marzo')
+  })
+})
+
+describe('formatLocalDate', () => {
+  test('usa los componentes LOCALES del Date, no UTC', () => {
+    expect(formatLocalDate(new Date(2026, 0, 5))).toBe('2026-01-05')
+  })
+
+  test('rellena mes y día con ceros', () => {
+    expect(formatLocalDate(new Date(2026, 8, 3))).toBe('2026-09-03')
+  })
+})
+
+describe('localDateKey', () => {
+  test('evento de día completo ("YYYY-MM-DD" flotante): se usa tal cual', () => {
+    expect(localDateKey('2026-06-15')).toBe('2026-06-15')
+  })
+
+  test('evento con hora (instante UTC "...Z"): se convierte al día local', () => {
+    const iso = new Date(2026, 5, 15, 23, 30).toISOString() // 23:30 hora local
+    expect(localDateKey(iso)).toBe('2026-06-15')
   })
 })
 

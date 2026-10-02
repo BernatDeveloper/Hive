@@ -2,28 +2,39 @@
 // renderizar el componente. Esta zona ha tenido bugs históricos (cambio de
 // mes, día completo vs con hora, fin exclusivo de FullCalendar).
 
-export function todayDateStr(): string {
-  const d = new Date()
+// "YYYY-MM-DD" a partir de los componentes LOCALES de un Date (no UTC).
+// Compartido por los helpers de abajo y por Calendar.tsx (para formatear las
+// fechas que devuelve FullCalendar al navegar/arrastrar).
+export function formatLocalDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function todayDateStr(): string {
+  return formatLocalDate(new Date())
 }
 
 export function addDaysToDateStr(dateStr: string, delta: number): string {
   const [y, m, d] = dateStr.split('-').map(Number)
   const date = new Date(y, m - 1, d)
   date.setDate(date.getDate() + delta)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return formatLocalDate(date)
 }
 
 // Un evento con hora se guarda como instante UTC (ISO con "Z"); estas dos
 // funciones lo vuelven a expresar en fecha/hora locales para los inputs.
 export function isoToLocalDate(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatLocalDate(new Date(iso))
 }
 
 export function isoToLocalTime(iso: string): string {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// "Día local" de un event.start: con hora es un instante UTC ("...Z") que hay
+// que convertir; de día completo ya es "YYYY-MM-DD" flotante, se usa tal cual.
+export function localDateKey(start: string): string {
+  return start.includes('T') ? isoToLocalDate(start) : start
 }
 
 export function dayOfWeekName(dateStr: string): string {

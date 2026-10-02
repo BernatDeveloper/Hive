@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Event } from '../../types'
 import { downloadICS } from './ics'
+import { todayDateStr, addDaysToDateStr, localDateKey } from './dateUtils'
 
 interface Props {
   events: Event[]
@@ -22,28 +23,12 @@ const IconDownload = () => (
 // 'all' o un hex de la paleta de la sala.
 type Filter = 'all' | string
 
-function localDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function todayStr() {
-  return localDateStr(new Date())
-}
-
 function tomorrowStr() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return localDateStr(d)
-}
-
-// Evento con hora: guardado como instante UTC ("...Z"), hay que pasarlo a fecha/hora locales.
-// Evento de día completo: fecha flotante "YYYY-MM-DD", se usa tal cual.
-function localDateKey(str: string): string {
-  return str.includes('T') ? localDateStr(new Date(str)) : str
+  return addDaysToDateStr(todayDateStr(), 1)
 }
 
 function getDateLabel(dateKey: string): string {
-  if (dateKey === todayStr()) return 'Hoy'
+  if (dateKey === todayDateStr()) return 'Hoy'
   if (dateKey === tomorrowStr()) return 'Mañana'
   const [y, m, d] = dateKey.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
@@ -63,7 +48,7 @@ export default function EventsPanel({ events, roomName, primaryColor = '#0071E3'
   // La paleta puede haber cambiado: si el color filtrado ya no existe, "Todos".
   const activeFilter = filter !== 'all' && !paletteColors.includes(filter) ? 'all' : filter
 
-  const today = todayStr()
+  const today = todayDateStr()
   const upcoming = events
     .filter(e => localDateKey(e.start) >= today)
     .filter(e => activeFilter === 'all' || e.color === activeFilter)

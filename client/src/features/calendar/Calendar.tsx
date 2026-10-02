@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import './calendar.css'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
+import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
+import type { DateClickArg } from '@fullcalendar/interaction'
 import esLocale from '@fullcalendar/core/locales/es'
 import type { Event, RecurrenceScope } from '../../types'
 import EventModal from './EventModal'
@@ -11,6 +13,7 @@ import type { EventSavePayload } from './EventModal'
 import EventsPanel from './EventsPanel'
 import { readableTextColor } from '../../shared/color'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { formatLocalDate, localDateKey } from './dateUtils'
 
 interface Props {
   events: Event[]
@@ -35,12 +38,36 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [mobileView, setMobileView] = useState<'calendar' | 'events'>('calendar')
   const isMobile = useIsMobile()
+  const calendarRef = useRef<FullCalendar>(null)
 
   function handleSelect(info: DateSelectArg) {
     setModal({ open: true, start: info.startStr, end: info.endStr })
   }
 
+  // Navega a la vista día de esa fecha (estilo Google Calendar); si ese día
+  // no tiene ningún evento, además abre directamente el modal de uno nuevo —
+  // si ya tenía eventos, solo navega y el usuario toca el que quiera editar.
+  function goToDay(dateStr: string) {
+    calendarRef.current?.getApi().changeView('timeGridDay', dateStr)
+    const hasEvents = events.some(e => localDateKey(e.start) === dateStr)
+    if (!hasEvents) {
+      setModal({ open: true, start: dateStr, end: dateStr })
+    }
+  }
+
+  // Clic en el hueco vacío de un día en vista mes (en vista día no hace
+  // falta: crear ahí ya pasa por `select`, con hora incluida).
+  function handleDateClick(info: DateClickArg) {
+    if (info.view.type === 'dayGridMonth') {
+      goToDay(info.dateStr)
+    }
+  }
+
   function handleEventClick(info: EventClickArg) {
+    if (info.view.type === 'dayGridMonth') {
+      if (info.event.start) goToDay(formatLocalDate(info.event.start))
+      return
+    }
     const event = events.find(e => e.id === info.event.id)
     if (event) setModal({ open: true, event })
   }
@@ -129,26 +156,31 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
         {(!isMobile || mobileView === 'calendar') && (
           <div className="calendar-main">
             <FullCalendar
-              plugins={[dayGridPlugin, interactionPlugin]}
+              ref={calendarRef}
+              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
               initialView="dayGridMonth"
-              selectable
+              // Seleccionable solo en vista día (crear arrastrando un hueco
+              // de hora); en vista mes un clic en el día navega en vez de
+              // seleccionar — ver handleDateClick/handleEventClick.
+              selectable={false}
+              views={{ timeGridDay: { selectable: true } }}
               selectMirror
-              // Por defecto FullCalendar exige pulsación larga para
-              // seleccionar en táctil (para no chocar con el scroll de
-              // vistas con desplazamiento interno); dayGridMonth no lo
-              // necesita, así que un toque normal ya selecciona el día.
-              selectLongPressDelay={0}
               select={handleSelect}
+              dateClick={handleDateClick}
               eventClick={handleEventClick}
+              // El enlace "+N más" de un día con muchos eventos lleva a su
+              // vista día, en vez de abrir el popover propio de FullCalendar
+              // — mismo patrón que cualquier otro clic sobre el día.
+              moreLinkClick="day"
               events={fcEvents}
               locale="es"
               locales={[esLocale]}
               eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
               height="100%"
               headerToolbar={{
-                left: 'prev,next',
+                left: 'prev,next today',
                 center: 'title',
-                right: 'today',
+                right: 'dayGridMonth,timeGridDay',
               }}
               buttonText={{ today: 'Hoy' }}
             />
