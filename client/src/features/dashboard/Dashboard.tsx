@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './dashboard.css'
 import { forgetRoom, usePresence } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
@@ -44,6 +44,8 @@ const IconSettings = () => (
 export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, onLeave, onUpdateRoom }: Props) {
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showPeople, setShowPeople] = useState(false)
+  const peopleRef = useRef<HTMLDivElement>(null)
 
   const { colors, cssVars, roomWithColors, eventColors } = useRoomStyle(room, onUpdateRoom)
   const presence = usePresence()
@@ -52,6 +54,23 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const notes = useNotes(room.name, initialNotes)
   const undo = useUndo(room.name)
   useRoomLost(onLeave)
+
+  // Cierra el desplegable de presencia al tocar fuera o al pulsar Escape.
+  useEffect(() => {
+    if (!showPeople) return
+    function onPointerDown(e: PointerEvent) {
+      if (!peopleRef.current?.contains(e.target as Node)) setShowPeople(false)
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowPeople(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [showPeople])
 
   function leave() {
     forgetRoom()
@@ -76,17 +95,37 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
 
         <div className="dashboard-header-right">
           {presence.length > 1 && (
-            <div className="dashboard-presence" title={presence.map(p => p.name).join(', ')}>
-              {presence.slice(0, 4).map((p, i) => (
-                <span
-                  key={i}
-                  className="dashboard-presence-avatar"
-                  style={{ background: p.color, color: readableTextColor(p.color) }}
-                >
-                  {p.name.charAt(0)}
-                </span>
-              ))}
-              {presence.length > 4 && <span className="dashboard-presence-more">+{presence.length - 4}</span>}
+            <div className="dashboard-presence-wrap" ref={peopleRef}>
+              <button
+                type="button"
+                className="dashboard-presence"
+                onClick={() => setShowPeople(v => !v)}
+                aria-haspopup="true"
+                aria-expanded={showPeople}
+                aria-label={`Personas en la sala: ${presence.map(p => p.name).join(', ')}`}
+              >
+                {presence.slice(0, 4).map((p, i) => (
+                  <span
+                    key={i}
+                    className="dashboard-presence-avatar"
+                    style={{ background: p.color, color: readableTextColor(p.color) }}
+                  >
+                    {p.name.charAt(0)}
+                  </span>
+                ))}
+                {presence.length > 4 && <span className="dashboard-presence-more">+{presence.length - 4}</span>}
+              </button>
+
+              {showPeople && (
+                <div className="dashboard-presence-popover" role="menu">
+                  {presence.map((p, i) => (
+                    <div key={i} className="dashboard-presence-popover-item">
+                      <span className="dashboard-presence-popover-dot" style={{ background: p.color }} />
+                      <span>{p.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <button className="btn-ghost btn-icon" onClick={() => setShowSettings(true)} aria-label="Ajustes">

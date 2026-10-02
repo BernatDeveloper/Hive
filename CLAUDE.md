@@ -242,7 +242,7 @@ Nombre + color **por dispositivo**, guardados en `localStorage` (`client/src/fea
 
 ### Presencia con nombres
 
-`server/sockets/presence.js` mantiene en memoria `room → Map<socketId, {name, color}>` (poblado en `join-room`, limpiado en `disconnecting`, actualizado en vivo por `update-identity`). El Dashboard muestra hasta 4 avatares con la inicial del nombre (`readableTextColor` para el contraste) + "+N" si hay más, con el listado completo en el `title` (`usePresence` devuelve `PresencePerson[]`, no ya un número).
+`server/sockets/presence.js` mantiene en memoria `room → Map<socketId, {name, color}>` (poblado en `join-room`, limpiado en `disconnecting`, actualizado en vivo por `update-identity`). El Dashboard muestra hasta 4 avatares con la inicial del nombre (`readableTextColor` para el contraste) + "+N" si hay más (`usePresence` devuelve `PresencePerson[]`, no ya un número); un clic abre un desplegable (`dashboard-presence-popover`) con el nombre y el color de cada persona — se cierra al tocar fuera o con Escape.
 
 Al renombrarse en `RoomSettings`, el guardado emite `update-identity` (además de persistir en `localStorage`) para que el nuevo nombre se vea sin recargar — tanto en el propio header como en el de las demás pestañas de la sala. **Nota de diseño (Fase 9/MEJORAS-3):** `last_editor_name`/`last_editor_color` de eventos y notas son histórico a propósito (quién hizo esa edición en su momento) — `update-identity` no los toca ni debe tocarlos.
 
@@ -271,7 +271,7 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
 6. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
 7. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo, **paleta de colores de evento** (guardados en `room_style`), **zona horaria de la sala** (gobierna los recordatorios, no el display) y **tu identidad** (nombre/color de dispositivo, global o solo para esta sala)
 8. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
-9. Presencia: el header del Dashboard muestra hasta 4 avatares (inicial + color de cada identidad conectada) si hay más de un dispositivo en la sala
+9. Presencia: el header del Dashboard muestra hasta 4 avatares (inicial + color de cada identidad conectada) si hay más de un dispositivo en la sala; un clic abre un desplegable con el nombre y color completos de cada persona
 10. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
 11. Calendario → botón ⬇ en el panel de "Próximos": descarga un `.ics` con todos los eventos (`features/calendar/ics.ts`, generado en cliente)
 12. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
@@ -372,7 +372,7 @@ interface Note {
 features/
   auth/         RoomEntry (intercala IdentityForm antes de create/join si hace falta), HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
   identity/     identity.ts (Identity, getIdentity/get·setGlobalIdentity/get·setRoomOverride/clearRoomOverride — localStorage) + identity.test.ts (entorno jsdom vía `// @vitest-environment jsdom`), IdentityForm (alta única de nombre+color) + identity.css (swatches, reutilizado también por RoomSettings)
-  dashboard/    Dashboard (avatares de presencia en el header) + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
+  dashboard/    Dashboard (avatares de presencia en el header, con desplegable de nombres/colores al clic) + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
   calendar/     Calendar + calendar.css (banner de conflicto de evento + atribución), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar), EventsPanel, options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros extraídos de EventModal: addDaysToDateStr, isoToLocalDate/Time, buildEventDates) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
   lists/        Lists + lists.css, useLists
   settings/     RoomSettings (colores + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad") + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)

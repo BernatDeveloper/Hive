@@ -31,11 +31,58 @@
   gap: 0.5rem;
 }
 
+.dashboard-presence-wrap {
+  position: relative;
+}
+
 .dashboard-presence {
   display: flex;
   align-items: center;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
+  background: transparent;
+  border: none;
+  border-radius: 100px;
+  padding: 0.15rem;
+  font-family: inherit;
+  transition: background var(--transition-fast);
+}
+.dashboard-presence:hover { background: var(--surface-2); }
+
+.dashboard-presence-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 160px;
+  max-width: 240px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 0.4rem;
+  z-index: 20;
+}
+
+.dashboard-presence-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dashboard-presence-popover-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .dashboard-presence-avatar {
