@@ -104,6 +104,37 @@ test('undo de una nota la restaura con su contenido', async () => {
   assert.equal((await currentState(s, name)).notes.length, 1)
 })
 
+test('undo de "vaciar completados" restaura todos los ítems marcados', async () => {
+  const { s, name } = await room('10.60.0.8')
+  s.emit('create-list', { room: name, title: 'Compra' })
+  const list = await once(s, 'list-created')
+  s.emit('create-list-item', { room: name, listId: list.id, text: 'pan' })
+  const pan = await once(s, 'list-item-created')
+  s.emit('create-list-item', { room: name, listId: list.id, text: 'leche' })
+  const leche = await once(s, 'list-item-created')
+  s.emit('create-list-item', { room: name, listId: list.id, text: 'huevos' })
+  await once(s, 'list-item-created')
+
+  s.emit('toggle-list-item', { room: name, id: pan.id, checked: true })
+  await once(s, 'list-item-updated')
+  s.emit('toggle-list-item', { room: name, id: leche.id, checked: true })
+  await once(s, 'list-item-updated')
+
+  const deletedP = once(s, 'list-items-deleted')
+  const ack = await emitAck(s, 'clear-completed-items', { room: name, listId: list.id })
+  assert.match(ack.label, /2 completados/)
+  const deleted = await deletedP
+  assert.deepEqual(deleted.ids.sort(), [leche.id, pan.id].sort())
+  assert.equal((await currentState(s, name)).listItems.length, 1)
+
+  const restoredIds = new Set()
+  s.on('list-item-created', it => restoredIds.add(it.id))
+  await emitAck(s, 'undo-delete', { room: name, token: ack.undoToken })
+  await new Promise(r => setTimeout(r, 100))
+  assert.deepEqual([...restoredIds].sort(), [leche.id, pan.id].sort())
+  assert.equal((await currentState(s, name)).listItems.length, 3)
+})
+
 test('undo con token caducado/desconocido → ok:false', async () => {
   const { s, name } = await room('10.60.0.5')
   const ack = await emitAck(s, 'undo-delete', { room: name, token: 'token-que-no-existe' })

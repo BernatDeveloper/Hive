@@ -117,12 +117,6 @@
   color: var(--muted);
 }
 
-.settings-preview {
-  border-radius: var(--radius-lg);
-  padding: 1rem;
-  border: 1px solid var(--border);
-  margin: 0.25rem 0;
-}
 
 .settings-section {
   margin: 0.25rem 0;
@@ -190,7 +184,3 @@
 
 .settings-row--danger { color: var(--danger); }
 .settings-row--danger:hover { background: rgba(255, 59, 48, 0.08); }
-
-@media (max-width: 640px) {
-  .settings-preview { padding: 0.85rem; }
-}

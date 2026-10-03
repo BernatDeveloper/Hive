@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { db } from './connection.js'
 
+// Forma que espera el cliente (ver client/src/types.ts ListItem / contract.test.js)
+// — sin esto, un `SELECT *` se cuela con created_at/updated_at de más.
+const toClientItem = row => ({ id: row.id, list_id: row.list_id, room: row.room, text: row.text, checked: Boolean(row.checked) })
+
 export function getLists(room) {
   return db.prepare('SELECT * FROM list WHERE room = ? ORDER BY created_at ASC').all(room)
 }
@@ -18,6 +22,13 @@ export function createList(room, title) {
     'INSERT INTO list (id, room, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
   ).run(id, room, title, now, now)
   return { id, room, title, created_at: now }
+}
+
+export function updateListTitle(id, title) {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE list SET title = ?, updated_at = ? WHERE id = ?').run(title, now, id)
+  const row = db.prepare('SELECT id, room, title, created_at FROM list WHERE id = ?').get(id)
+  return row ?? null
 }
 
 export function deleteList(id) {
@@ -49,8 +60,24 @@ export function toggleListItem(id, checked) {
   const now = new Date().toISOString()
   db.prepare('UPDATE list_item SET checked = ?, updated_at = ? WHERE id = ?')
     .run(checked ? 1 : 0, now, id)
-  const item = db.prepare('SELECT * FROM list_item WHERE id = ?').get(id)
-  return { ...item, checked: Boolean(item.checked) }
+  return toClientItem(db.prepare('SELECT * FROM list_item WHERE id = ?').get(id))
+}
+
+export function updateListItemText(id, text) {
+  const now = new Date().toISOString()
+  db.prepare('UPDATE list_item SET text = ?, updated_at = ? WHERE id = ?').run(text, now, id)
+  return toClientItem(db.prepare('SELECT * FROM list_item WHERE id = ?').get(id))
+}
+
+// Borra los ítems ya marcados de una lista ("vaciar completados"). Devuelve
+// las filas completas (no la forma de cliente) porque se usan para el
+// tombstone de deshacer, igual que deleteListItem.
+export function clearCompletedItems(listId) {
+  const items = db.prepare('SELECT * FROM list_item WHERE list_id = ? AND checked = 1').all(listId)
+  if (items.length > 0) {
+    db.prepare('DELETE FROM list_item WHERE list_id = ? AND checked = 1').run(listId)
+  }
+  return items
 }
 
 export function deleteListItem(id) {

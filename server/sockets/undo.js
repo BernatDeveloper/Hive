@@ -22,6 +22,11 @@ export function registerUndoHandlers(io, socket) {
     } else if (entry.kind === 'list-item') {
       restoreListItem(entry.item)
       broadcast(io, room, 'list-item-created', itemForClient(entry.item))
+    } else if (entry.kind === 'list-items') {
+      for (const it of entry.items) {
+        restoreListItem(it)
+        broadcast(io, room, 'list-item-created', itemForClient(it))
+      }
     } else if (entry.kind === 'note') {
       restoreNote(entry.note)
       broadcast(io, room, 'note-created', entry.note)

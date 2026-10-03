@@ -212,21 +212,6 @@ export default function RoomSettings({ room, events, onClose, onLeave }: Props) 
           </p>
         </div>
 
-        <div
-          className="settings-preview"
-          style={{
-            background: colors.background_color,
-            color: colors.text_color,
-          }}
-        >
-          <div style={{ background: colors.sidebar_color, padding: '8px 12px', borderRadius: '8px', marginBottom: '10px', fontSize: '0.85rem' }}>
-            Panel / Superficie
-          </div>
-          <button style={{ background: colors.primary_color, color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '8px', cursor: 'default', fontSize: '0.9rem' }}>
-            Botón primario
-          </button>
-        </div>
-
         <div className="settings-section">
           <span className="settings-presets-label">Tu identidad</span>
           <p className="settings-notify-text" style={{ fontSize: '0.76rem', color: 'var(--muted)', margin: '0.35rem 0 0.65rem' }}>

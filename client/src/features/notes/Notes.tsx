@@ -45,6 +45,7 @@ const IconNotesPlaceholder = () => (
 
 export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [localTitle, setLocalTitle] = useState('')
   const [localBody, setLocalBody] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -164,6 +165,11 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
 
   const showConflict = conflict !== null && conflict.id === selectedId
 
+  const trimmedQuery = query.trim().toLowerCase()
+  const filteredNotes = trimmedQuery
+    ? notes.filter(n => n.title.toLowerCase().includes(trimmedQuery) || n.body.toLowerCase().includes(trimmedQuery))
+    : notes
+
   // ─── Sidebar ────────────────────────────────────────────
   const sidebar = (
     <aside className="notes-sidebar">
@@ -174,11 +180,27 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
         </button>
       </div>
 
+      {notes.length > 0 && (
+        <div className="notes-search-wrap">
+          <input
+            type="text"
+            className="notes-search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar notas…"
+            aria-label="Buscar notas"
+          />
+        </div>
+      )}
+
       <div className="notes-sidebar-scroll">
         {notes.length === 0 && (
           <p className="notes-sidebar-empty">Crea tu primera nota</p>
         )}
-        {notes.map(note => (
+        {notes.length > 0 && filteredNotes.length === 0 && (
+          <p className="notes-sidebar-empty">Sin resultados para «{query.trim()}»</p>
+        )}
+        {filteredNotes.map(note => (
           <div
             key={note.id}
             className={`notes-sidebar-item ${note.id === selectedId ? 'notes-sidebar-item--active' : ''}`}

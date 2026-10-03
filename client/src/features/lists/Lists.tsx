@@ -7,10 +7,13 @@ interface Props {
   lists: List[]
   listItems: ListItem[]
   onCreateList: (title: string) => void
+  onUpdateListTitle: (id: string, title: string) => void
   onDeleteList: (id: string) => void
   onCreateItem: (listId: string, text: string) => void
   onToggleItem: (id: string, checked: boolean) => void
+  onUpdateItemText: (id: string, text: string) => void
   onDeleteItem: (id: string) => void
+  onClearCompleted: (listId: string) => void
 }
 
 const IconCheck = () => (
@@ -25,6 +28,13 @@ const IconTrash = () => (
     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
     <path d="M10 11v6M14 11v6"/>
     <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+  </svg>
+)
+
+const IconEdit = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>
   </svg>
 )
 
@@ -43,10 +53,73 @@ const IconListPlaceholder = () => (
   </svg>
 )
 
-export default function Lists({ lists, listItems, onCreateList, onDeleteList, onCreateItem, onToggleItem, onDeleteItem }: Props) {
+interface ItemRowProps {
+  item: ListItem
+  editing: boolean
+  editText: string
+  onStartEdit: () => void
+  onEditTextChange: (v: string) => void
+  onCommitEdit: () => void
+  onCancelEdit: () => void
+  onToggle: () => void
+  onDelete: () => void
+}
+
+// Fila de ítem: toque en el texto = marcar/desmarcar (como siempre); el lápiz
+// la cambia a modo edición (un <input> sustituye al <span>, sin botones al
+// lado — Enter/perder el foco guarda, Escape descarta).
+function ItemRow({ item, editing, editText, onStartEdit, onEditTextChange, onCommitEdit, onCancelEdit, onToggle, onDelete }: ItemRowProps) {
+  return (
+    <div className={`lists-item-row${item.checked ? ' lists-item-row--checked' : ''}`}>
+      <button
+        className={`lists-check${item.checked ? ' lists-check--on' : ''}`}
+        onClick={onToggle}
+        aria-label={item.checked ? 'Marcar como pendiente' : 'Marcar como completado'}
+      >
+        {item.checked && <IconCheck />}
+      </button>
+      {editing ? (
+        <input
+          className="lists-item-edit-input"
+          value={editText}
+          autoFocus
+          onChange={e => onEditTextChange(e.target.value)}
+          onBlur={onCommitEdit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); onCommitEdit() }
+            else if (e.key === 'Escape') onCancelEdit()
+          }}
+        />
+      ) : (
+        <>
+          <span
+            className={`lists-item-text${item.checked ? ' lists-item-text--done' : ''}`}
+            onClick={onToggle}
+          >
+            {item.text}
+          </span>
+          <button className="lists-edit-btn" onClick={onStartEdit} aria-label="Editar ítem">
+            <IconEdit />
+          </button>
+          <button className="lists-delete-btn" onClick={onDelete} aria-label="Eliminar ítem">
+            <IconTrash />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function Lists({
+  lists, listItems, onCreateList, onUpdateListTitle, onDeleteList,
+  onCreateItem, onToggleItem, onUpdateItemText, onDeleteItem, onClearCompleted,
+}: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [newListTitle, setNewListTitle] = useState('')
   const [newItemText, setNewItemText] = useState('')
+  const [titleDraft, setTitleDraft] = useState('')
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState('')
   const [mobilePage, setMobilePage] = useState<'lists' | 'detail'>('lists')
   const newItemRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
@@ -74,9 +147,18 @@ export default function Lists({ lists, listItems, onCreateList, onDeleteList, on
 
   function handleSelectList(id: string) {
     setSelectedId(id)
+    setTitleDraft(lists.find(l => l.id === id)?.title ?? '')
     setNewItemText('')
+    setEditingItemId(null)
     if (isMobile) setMobilePage('detail')
     setTimeout(() => newItemRef.current?.focus(), 80)
+  }
+
+  function commitTitle() {
+    if (!selectedList) return
+    const t = titleDraft.trim()
+    if (t && t !== selectedList.title) onUpdateListTitle(selectedList.id, t)
+    else setTitleDraft(selectedList.title)
   }
 
   function handleCreateItem(e: React.FormEvent) {
@@ -94,6 +176,23 @@ export default function Lists({ lists, listItems, onCreateList, onDeleteList, on
 
   function handleDeleteItem(id: string) {
     onDeleteItem(id)
+  }
+
+  function startEditItem(item: ListItem) {
+    setEditingItemId(item.id)
+    setEditingText(item.text)
+  }
+
+  function commitEditItem() {
+    if (!editingItemId) return
+    const original = listItems.find(i => i.id === editingItemId)
+    const t = editingText.trim()
+    if (original && t && t !== original.text) onUpdateItemText(editingItemId, t)
+    setEditingItemId(null)
+  }
+
+  function cancelEditItem() {
+    setEditingItemId(null)
   }
 
   const selectedList = lists.find(l => l.id === selectedId) ?? null
@@ -174,7 +273,14 @@ export default function Lists({ lists, listItems, onCreateList, onDeleteList, on
                 <IconChevronLeft />
               </button>
             )}
-            <h2 className="lists-detail-title">{selectedList.title}</h2>
+            <input
+              className="lists-detail-title-input"
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onBlur={commitTitle}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+              aria-label="Nombre de la lista"
+            />
             {allSelected.length > 0 && (
               <span className="lists-detail-count">
                 {checked.length}/{allSelected.length}
@@ -195,52 +301,46 @@ export default function Lists({ lists, listItems, onCreateList, onDeleteList, on
             )}
 
             {unchecked.map(item => (
-              <div key={item.id} className="lists-item-row">
-                <button
-                  className="lists-check"
-                  onClick={() => handleToggleItem(item)}
-                  aria-label="Marcar como completado"
-                />
-                <span className="lists-item-text" onClick={() => handleToggleItem(item)}>
-                  {item.text}
-                </span>
-                <button
-                  className="lists-delete-btn"
-                  onClick={() => handleDeleteItem(item.id)}
-                  aria-label="Eliminar ítem"
-                >
-                  <IconTrash />
-                </button>
-              </div>
+              <ItemRow
+                key={item.id}
+                item={item}
+                editing={editingItemId === item.id}
+                editText={editingText}
+                onStartEdit={() => startEditItem(item)}
+                onEditTextChange={setEditingText}
+                onCommitEdit={commitEditItem}
+                onCancelEdit={cancelEditItem}
+                onToggle={() => handleToggleItem(item)}
+                onDelete={() => handleDeleteItem(item.id)}
+              />
             ))}
 
             {checked.length > 0 && (
               <>
                 {unchecked.length > 0 && <div className="lists-section-divider" />}
-                <p className="lists-section-label">Completados · {checked.length}</p>
+                <div className="lists-section-header">
+                  <p className="lists-section-label">Completados · {checked.length}</p>
+                  <button
+                    type="button"
+                    className="lists-clear-btn"
+                    onClick={() => onClearCompleted(selectedList.id)}
+                  >
+                    Vaciar
+                  </button>
+                </div>
                 {checked.map(item => (
-                  <div key={item.id} className="lists-item-row lists-item-row--checked">
-                    <button
-                      className="lists-check lists-check--on"
-                      onClick={() => handleToggleItem(item)}
-                      aria-label="Marcar como pendiente"
-                    >
-                      <IconCheck />
-                    </button>
-                    <span
-                      className="lists-item-text lists-item-text--done"
-                      onClick={() => handleToggleItem(item)}
-                    >
-                      {item.text}
-                    </span>
-                    <button
-                      className="lists-delete-btn"
-                      onClick={() => handleDeleteItem(item.id)}
-                      aria-label="Eliminar ítem"
-                    >
-                      <IconTrash />
-                    </button>
-                  </div>
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    editing={editingItemId === item.id}
+                    editText={editingText}
+                    onStartEdit={() => startEditItem(item)}
+                    onEditTextChange={setEditingText}
+                    onCommitEdit={commitEditItem}
+                    onCancelEdit={cancelEditItem}
+                    onToggle={() => handleToggleItem(item)}
+                    onDelete={() => handleDeleteItem(item.id)}
+                  />
                 ))}
               </>
             )}

@@ -43,6 +43,16 @@
   flex-shrink: 0;
 }
 
+.notes-search-wrap {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.notes-search {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.65rem;
+}
+
 .notes-sidebar-scroll {
   flex: 1;
   overflow-y: auto;

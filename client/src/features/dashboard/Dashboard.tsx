@@ -152,10 +152,13 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             lists={lists.lists}
             listItems={lists.listItems}
             onCreateList={lists.createList}
+            onUpdateListTitle={lists.updateListTitle}
             onDeleteList={(id) => { lists.deleteList(id).then(undo.offer) }}
             onCreateItem={lists.createItem}
             onToggleItem={lists.toggleItem}
+            onUpdateItemText={lists.updateItemText}
             onDeleteItem={(id) => { lists.deleteItem(id).then(undo.offer) }}
+            onClearCompleted={(listId) => { lists.clearCompleted(listId).then(undo.offer) }}
           />
         )}
         {activeModule === 'notes' && (

@@ -64,6 +64,39 @@ test('list-created / list-item-created: claves', async () => {
   assert.equal(typeof item.checked, 'boolean')
 })
 
+test('list-updated / list-item-updated (toggle y texto): claves', async () => {
+  const { s, name } = await room('10.70.0.10')
+  s.emit('create-list', { room: name, title: 'L' })
+  const list = await once(s, 'list-created')
+
+  s.emit('update-list', { room: name, id: list.id, title: 'L2' })
+  sameKeys(await once(s, 'list-updated'), LIST_KEYS, 'list-updated')
+
+  s.emit('create-list-item', { room: name, listId: list.id, text: 'x' })
+  const item = await once(s, 'list-item-created')
+
+  s.emit('toggle-list-item', { room: name, id: item.id, checked: true })
+  sameKeys(await once(s, 'list-item-updated'), LIST_ITEM_KEYS, 'list-item-updated (toggle)')
+
+  s.emit('update-list-item', { room: name, id: item.id, text: 'y' })
+  sameKeys(await once(s, 'list-item-updated'), LIST_ITEM_KEYS, 'list-item-updated (texto)')
+})
+
+test('clear-completed-items: list-items-deleted y ack', async () => {
+  const { s, name } = await room('10.70.0.11')
+  s.emit('create-list', { room: name, title: 'L' })
+  const list = await once(s, 'list-created')
+  s.emit('create-list-item', { room: name, listId: list.id, text: 'x' })
+  const item = await once(s, 'list-item-created')
+  s.emit('toggle-list-item', { room: name, id: item.id, checked: true })
+  await once(s, 'list-item-updated')
+
+  const deletedP = once(s, 'list-items-deleted')
+  const ack = await emitAck(s, 'clear-completed-items', { room: name, listId: list.id })
+  assert.deepEqual(keysOf(ack), ['label', 'undoToken'])
+  assert.deepEqual(keysOf(await deletedP), ['ids'])
+})
+
 test('note-created / note-updated ack: claves de Note', async () => {
   const { s, name } = await room('10.70.0.4')
   s.emit('create-note', { room: name, title: 'N' })
