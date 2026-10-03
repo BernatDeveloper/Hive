@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './calendar.css'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -28,6 +28,11 @@ interface Props {
   onUpdateEvent: (data: EventSavePayload, scope?: RecurrenceScope) => void
   onDeleteEvent: (id: string, scope?: RecurrenceScope) => void
   onDismissConflict: () => void
+  // Abrir un evento desde fuera (búsqueda global): navega a su fecha y abre
+  // el modal de edición. `onJumpHandled` limpia el "pedido" en el padre para
+  // no reabrirlo en cada re-render.
+  jumpToEvent?: Event | null
+  onJumpHandled?: () => void
 }
 
 interface ModalState {
@@ -44,12 +49,32 @@ interface ModalState {
 // día, o un toque/clic que ya gestiona FullCalendar).
 const SWIPE_THRESHOLD_PX = 50
 
-export default function Calendar({ events, primaryColor = '#3B82F6', conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict }: Props) {
+export default function Calendar({ events, primaryColor = '#3B82F6', conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict, jumpToEvent, onJumpHandled }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [swipeDir, setSwipeDir] = useState<'next' | 'prev' | null>(null)
   const isMobile = useIsMobile()
   const calendarRef = useRef<FullCalendar>(null)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+
+  // Resultado de la búsqueda global: salta a la vista día de ese evento y lo
+  // abre para editar, como si se hubiera tocado en el calendario. Abrir el
+  // modal es estado derivado de la prop (se aplica durante el render, mismo
+  // patrón que el resto de la app); navegar la vista toca `calendarRef`
+  // (imperativo) y por eso sigue en un efecto aparte.
+  const [appliedJumpEventId, setAppliedJumpEventId] = useState<string | null>(null)
+  if (jumpToEvent && jumpToEvent.id !== appliedJumpEventId) {
+    setAppliedJumpEventId(jumpToEvent.id)
+    setModal({ open: true, event: jumpToEvent })
+  }
+
+  useEffect(() => {
+    if (!jumpToEvent) return
+    calendarRef.current?.getApi().changeView('timeGridDay', localDateKey(jumpToEvent.start))
+  }, [jumpToEvent])
+
+  useEffect(() => {
+    if (jumpToEvent) onJumpHandled?.()
+  }, [jumpToEvent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(info: DateSelectArg) {
     setModal({ open: true, start: info.startStr, end: info.endStr })

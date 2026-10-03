@@ -13,6 +13,10 @@ export function useLists(room: string, initialLists: List[], initialItems: ListI
     function onListCreated(list: List) { setLists(prev => prev.some(l => l.id === list.id) ? prev : [...prev, list]) }
     function onListUpdated(list: List) { setLists(prev => prev.map(l => l.id === list.id ? list : l)) }
     function onListDeleted(id: string) { setLists(prev => prev.filter(l => l.id !== id)) }
+    function onListCloned(payload: { list: List; items: ListItem[] }) {
+      setLists(prev => prev.some(l => l.id === payload.list.id) ? prev : [...prev, payload.list])
+      setListItems(prev => [...prev, ...payload.items])
+    }
     function onItemCreated(item: ListItem) { setListItems(prev => prev.some(i => i.id === item.id) ? prev : [...prev, item]) }
     function onItemUpdated(item: ListItem) { setListItems(prev => prev.map(i => i.id === item.id ? item : i)) }
     function onItemDeleted(id: string) { setListItems(prev => prev.filter(i => i.id !== id)) }
@@ -25,6 +29,7 @@ export function useLists(room: string, initialLists: List[], initialItems: ListI
     socket.on('list-created', onListCreated)
     socket.on('list-updated', onListUpdated)
     socket.on('list-deleted', onListDeleted)
+    socket.on('list-cloned', onListCloned)
     socket.on('list-item-created', onItemCreated)
     socket.on('list-item-updated', onItemUpdated)
     socket.on('list-item-deleted', onItemDeleted)
@@ -34,6 +39,7 @@ export function useLists(room: string, initialLists: List[], initialItems: ListI
       socket.off('list-created', onListCreated)
       socket.off('list-updated', onListUpdated)
       socket.off('list-deleted', onListDeleted)
+      socket.off('list-cloned', onListCloned)
       socket.off('list-item-created', onItemCreated)
       socket.off('list-item-updated', onItemUpdated)
       socket.off('list-item-deleted', onItemDeleted)
@@ -53,5 +59,6 @@ export function useLists(room: string, initialLists: List[], initialItems: ListI
     updateItemText: (id: string, text: string) => emitWrite('update-list-item', { room, id, text }),
     deleteItem: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-list-item', { room, id }, {}),
     clearCompleted: (listId: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('clear-completed-items', { room, listId }, {}),
+    cloneList: (id: string) => emitWrite('clone-list', { room, id }),
   }
 }

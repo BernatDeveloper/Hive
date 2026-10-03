@@ -1,4 +1,4 @@
-import { createNote, updateNote, deleteNote } from '../db/index.js'
+import { createNote, updateNote, setNotePinned, deleteNote } from '../db/index.js'
 import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
@@ -33,6 +33,15 @@ export function registerNoteHandlers(io, socket) {
     } else {
       ack?.({ status: 'not-found' })
     }
+  })
+
+  // Fijar/desfijar arriba del todo — no toca updated_at ni pasa por el
+  // control de concurrencia optimista (ver setNotePinned).
+  safeAuthedOn(socket, 'toggle-note-pin', 'note-error', { message: 'No se pudo fijar la nota' }, ({ room, id, pinned }) => {
+    if (!str(id, MAX.id)) return
+    const note = setNotePinned(id, Boolean(pinned))
+    if (!note) return
+    broadcast(io, room, 'note-updated', note)
   })
 
   safeAuthedOn(socket, 'delete-note', 'note-error', { message: 'No se pudo eliminar la nota' }, ({ room, id }, ack) => {

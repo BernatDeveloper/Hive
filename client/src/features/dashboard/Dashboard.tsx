@@ -9,6 +9,7 @@ import Calendar from '../calendar/Calendar'
 import Lists from '../lists/Lists'
 import Notes from '../notes/Notes'
 import RoomSettings from '../settings/RoomSettings'
+import GlobalSearch from '../search/GlobalSearch'
 import { useRoomStyle } from '../settings/useRoomStyle'
 import { useEvents } from '../calendar/useEvents'
 import { useLists } from '../lists/useLists'
@@ -41,11 +42,25 @@ const IconSettings = () => (
   </svg>
 )
 
+const IconSearch = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="11" cy="11" r="8"/>
+    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </svg>
+)
+
 export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, onLeave, onUpdateRoom }: Props) {
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   const [showPeople, setShowPeople] = useState(false)
   const peopleRef = useRef<HTMLDivElement>(null)
+
+  // Navegación desde la búsqueda global: cada módulo consume su "pedido" en
+  // un efecto y lo limpia (ver jumpToEvent/focusNoteId/focusListId).
+  const [calendarJump, setCalendarJump] = useState<Event | null>(null)
+  const [notesFocusId, setNotesFocusId] = useState<string | null>(null)
+  const [listsFocusId, setListsFocusId] = useState<string | null>(null)
 
   const { colors, cssVars, roomWithColors } = useRoomStyle(room, onUpdateRoom)
   const presence = usePresence()
@@ -54,6 +69,19 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const notes = useNotes(room.name, initialNotes)
   const undo = useUndo(room.name)
   useRoomLost(onLeave)
+
+  function openSearchEvent(event: Event) {
+    setActiveModule('calendar')
+    setCalendarJump(event)
+  }
+  function openSearchNote(noteId: string) {
+    setActiveModule('notes')
+    setNotesFocusId(noteId)
+  }
+  function openSearchList(listId: string) {
+    setActiveModule('lists')
+    setListsFocusId(listId)
+  }
 
   // Cierra el desplegable de presencia al tocar fuera o al pulsar Escape.
   useEffect(() => {
@@ -128,6 +156,9 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
               )}
             </div>
           )}
+          <button className="btn-ghost btn-icon" onClick={() => setShowSearch(true)} aria-label="Buscar">
+            <IconSearch />
+          </button>
           <button className="btn-ghost btn-icon" onClick={() => setShowSettings(true)} aria-label="Ajustes">
             <IconSettings />
           </button>
@@ -145,6 +176,8 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             onUpdateEvent={cal.updateEvent}
             onDeleteEvent={(id, scope) => { cal.deleteEvent(id, scope).then(undo.offer) }}
             onDismissConflict={cal.dismissConflict}
+            jumpToEvent={calendarJump}
+            onJumpHandled={() => setCalendarJump(null)}
           />
         )}
         {activeModule === 'lists' && (
@@ -154,11 +187,14 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             onCreateList={lists.createList}
             onUpdateListTitle={lists.updateListTitle}
             onDeleteList={(id) => { lists.deleteList(id).then(undo.offer) }}
+            onCloneList={lists.cloneList}
             onCreateItem={lists.createItem}
             onToggleItem={lists.toggleItem}
             onUpdateItemText={lists.updateItemText}
             onDeleteItem={(id) => { lists.deleteItem(id).then(undo.offer) }}
             onClearCompleted={(listId) => { lists.clearCompleted(listId).then(undo.offer) }}
+            focusListId={listsFocusId}
+            onFocusHandled={() => setListsFocusId(null)}
           />
         )}
         {activeModule === 'notes' && (
@@ -167,6 +203,9 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             onCreateNote={notes.createNote}
             onUpdateNote={notes.updateNote}
             onDeleteNote={(id) => { notes.deleteNote(id).then(undo.offer) }}
+            onTogglePin={notes.togglePin}
+            focusNoteId={notesFocusId}
+            onFocusHandled={() => setNotesFocusId(null)}
           />
         )}
       </main>
@@ -177,6 +216,19 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
 
       {showSettings && (
         <RoomSettings room={roomWithColors} events={cal.events} onClose={() => setShowSettings(false)} onLeave={leave} />
+      )}
+
+      {showSearch && (
+        <GlobalSearch
+          events={cal.events}
+          notes={notes.notes}
+          lists={lists.lists}
+          listItems={lists.listItems}
+          onOpenEvent={openSearchEvent}
+          onOpenNote={openSearchNote}
+          onOpenList={openSearchList}
+          onClose={() => setShowSearch(false)}
+        />
       )}
     </div>
   )

@@ -12,7 +12,7 @@ const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color
 const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'background_color', 'text_color', 'sidebar_color']
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
-const NOTE_KEYS = ['id', 'room', 'title', 'body', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
+const NOTE_KEYS = ['id', 'room', 'title', 'body', 'pinned', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
 const PRESENCE_PERSON_KEYS = ['name', 'color']
 
 const keysOf = o => Object.keys(o).sort()
@@ -102,10 +102,49 @@ test('note-created / note-updated ack: claves de Note', async () => {
   s.emit('create-note', { room: name, title: 'N' })
   const note = await once(s, 'note-created')
   sameKeys(note, NOTE_KEYS, 'note-created')
+  assert.equal(note.pinned, false)
 
   const ack = await emitAck(s, 'update-note', { room: name, note: { id: note.id, title: 'N', body: 'b', updated_at: note.updated_at } })
   assert.deepEqual(keysOf(ack), ['note', 'status'])
   sameKeys(ack.note, NOTE_KEYS, 'ack.note')
+})
+
+test('toggle-note-pin: note-updated con pinned y reordena antes que las no fijadas', async () => {
+  const { s, name } = await room('10.70.0.12')
+  s.emit('create-note', { room: name, title: 'Vieja' })
+  const older = await once(s, 'note-created')
+  s.emit('create-note', { room: name, title: 'Nueva' })
+  await once(s, 'note-created')
+
+  const updatedP = once(s, 'note-updated')
+  s.emit('toggle-note-pin', { room: name, id: older.id, pinned: true })
+  const updated = await updatedP
+  sameKeys(updated, NOTE_KEYS, 'note-updated (pin)')
+  assert.equal(updated.pinned, true)
+
+  s.emit('join-room', { name, password: 'test1234' })
+  const granted = await once(s, 'access-granted')
+  assert.equal(granted.notes[0].id, older.id)
+})
+
+test('clone-list: list-cloned claves, ítems duplicados sin marcar', async () => {
+  const { s, name } = await room('10.70.0.13')
+  s.emit('create-list', { room: name, title: 'Compra' })
+  const list = await once(s, 'list-created')
+  s.emit('create-list-item', { room: name, listId: list.id, text: 'pan' })
+  const item = await once(s, 'list-item-created')
+  s.emit('toggle-list-item', { room: name, id: item.id, checked: true })
+  await once(s, 'list-item-updated')
+
+  const clonedP = once(s, 'list-cloned')
+  s.emit('clone-list', { room: name, id: list.id })
+  const cloned = await clonedP
+  assert.deepEqual(keysOf(cloned), ['items', 'list'])
+  sameKeys(cloned.list, LIST_KEYS, 'list-cloned.list')
+  assert.equal(cloned.list.title, 'Compra (copia)')
+  assert.equal(cloned.items.length, 1)
+  sameKeys(cloned.items[0], LIST_ITEM_KEYS, 'list-cloned.items[0]')
+  assert.equal(cloned.items[0].checked, false)
 })
 
 test('style-updated: claves de room', async () => {

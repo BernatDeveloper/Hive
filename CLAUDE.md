@@ -53,9 +53,13 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 
 Modo **WAL** (`db/connection.js`) — mejores lecturas concurrentes; deja ficheros
 `calendario.db-wal` y `calendario.db-shm` (gitignored). El esquema completo
-(tablas + índices) vive en `db/schema.js`; `db/migrations.js` es un stub vacío
-reservado para el día que haga falta migrar una DB con datos reales (hoy el
-proyecto no está desplegado, así que no hay ALTER TABLE que mantener).
+(tablas + índices) vive en `db/schema.js`, con `CREATE TABLE IF NOT EXISTS` —
+eso crea tablas que falten pero **no** añade columnas nuevas a una tabla que
+ya existía en disco. Para eso está `db/migrations.js`: `runMigrations()`
+(llamado después de `createSchema()` en `initDb()`) añade con `ALTER TABLE`
+las columnas que una versión anterior del esquema no tenía, comprobando antes
+con `PRAGMA table_info(<tabla>)` (`addColumnIfMissing`) — idempotente, una DB
+nueva ya nace con la columna desde `createSchema()` así que no hace nada.
 
 ### Tabla `room`
 | column | type | notes |
@@ -114,6 +118,7 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | room | TEXT FK→room.name | ON DELETE CASCADE |
 | title | TEXT | default 'Sin título' |
 | body | TEXT | default '' |
+| pinned | INTEGER | 0/1, converted to boolean on read; fijar no toca `updated_at` ni pasa por concurrencia optimista (`toggle-note-pin`) |
 | created_at | TEXT | ISO datetime |
 | updated_at | TEXT | updated on each write, used for cleanup |
 | last_editor_name | TEXT | nullable; igual que en `event` |
@@ -143,9 +148,11 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | `delete-event` | `{ room, id, scope? }` | evento único → `event-deleted`. Instancia de serie: `single` → `event-deleted`; `future` → `events-deleted` (`{ ids }`); `all` (defecto) → `series-deleted` (`{ recurrence_id }`). Ack `{ undoToken, label }` (ventana de deshacer) |
 | `create-note` | `{ room, title, editor_name?, editor_color? }` | `note-created` (room broadcast) |
 | `update-note` | `{ room, note: { id, title, body, updated_at, editor_name?, editor_color? } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
+| `toggle-note-pin` | `{ room, id, pinned }` | `note-updated` (room broadcast) — fijar/desfijar arriba del todo; no toca `updated_at` ni pasa por concurrencia optimista (ver `setNotePinned`) |
 | `delete-note` | `{ room, id }` | `note-deleted` (broadcast) + ack `{ undoToken, label }` |
 | `create-list` | `{ room, title }` | `list-created` (room broadcast) |
 | `update-list` | `{ room, id, title }` | `list-updated` (room broadcast) — renombrar, sin control de versión (last-write-wins) |
+| `clone-list` | `{ room, id }` | `list-cloned` (`{ list, items }`, room broadcast) — duplica la lista con todos sus ítems, sin marcar; título `"<original> (copia)"` |
 | `delete-list` | `{ room, id }` | `list-deleted` (broadcast) + ack `{ undoToken, label }` (borra en cascada los ítems; el undo los restaura) |
 | `create-list-item` | `{ room, listId, text }` | `list-item-created` (room broadcast) |
 | `toggle-list-item` | `{ room, id, checked }` | `list-item-updated` (room broadcast) |
@@ -284,6 +291,7 @@ No existe `room_style.event_colors` (eliminado): no hay nada que gestionar en Aj
 10. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
 11. Calendario, vistas **mes** y **día** (sin semana), sin panel lateral. Crear un evento sin fecha concreta: botón flotante "+" (esquina inferior derecha). Exportar `.ics` con todos los eventos: fila "Exportar calendario (.ics)" en Ajustes de sala (no en el calendario — ver `features/calendar/ics.ts`, generado en cliente). Navegación estilo Google Calendar: en vista mes, un clic en cualquier parte de un día (hueco vacío o sobre un evento) cambia a la vista día de esa fecha; si ese día no tenía ningún evento, además abre de inmediato el modal de uno nuevo — si ya tenía, solo navega, y desde la vista día se toca el evento que se quiera editar. El enlace "+N más" de un día con muchos eventos lleva igual a su vista día (`moreLinkClick="day"`), en vez del popover propio de FullCalendar; en móvil ese enlace se abrevia a "···". En vista día, seleccionar un hueco de hora sigue abriendo el modal de nuevo evento como siempre. En móvil, deslizar el dedo horizontalmente sobre la rejilla cambia de mes/día (equivalente táctil de "<"/">"), con un pequeño "tirón" animado en la dirección del swipe (`.calendar-swiping-next/prev`, limpiado por `onAnimationEnd`) para que el cambio no se note instantáneo. Los días fuera del mes actual se muestran atenuados (`.fc-day-other { opacity: 0.9 }` — lo bastante tenue para notarse, lo bastante alto para seguir leyéndose), no ocultos; cada celda tiene un alto mínimo (`.fc-daygrid-day-frame`) para que la última fila (normalmente días del mes siguiente) no se comprima hasta perder el número, con scroll vertical de respaldo en `.calendar-main` si aun así no cupieran las 6 filas. Los cinco botones del header (`<`, `>`, Hoy, Mes, Día) son cuadrados y del mismo tamaño; Hoy/Mes/Día muestran un icono en vez de texto (diana / calendario / reloj, vía `mask-image` con `currentColor` — el texto real sigue en el DOM para lectores de pantalla, solo se colapsa visualmente con `font-size: 0`); `<`/`>` ya traían su propio icono de FullCalendar. El título del header es más corto en móvil (`titleFormat={ month: 'short', year: 'numeric' }` → "dic 2026" en vez de "diciembre de 2026"), porque el nombre largo del mes no cabía en una línea junto a los botones y se partía en dos descuadrando el toolbar entero.
 12. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
+13. Búsqueda global: icono 🔍 en el header del Dashboard abre `GlobalSearch`, un modal que busca por texto en eventos, notas e ítems de lista ya cargados en el cliente (sin red). Elegir un resultado navega al módulo correspondiente y lo abre: un evento salta a su vista día y abre `EventModal`; una nota o una lista se seleccionan como si se hubiera tocado en su barra lateral
 
 ## Estructura de componentes
 
@@ -292,12 +300,13 @@ SocketProvider           # context de estado de conexión
 └── App                  # + useServiceWorkerUpdate() → banner "versión nueva"
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home/identity/create/join — auth con timeout de red (awaitAuthResponse); IdentityForm si no hay identidad de dispositivo aún
-    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con avatares de presencia)
+    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con avatares de presencia + buscador 🔍)
         ├── RoomSettings # color modal con presets + zona horaria (emits update-room-style, update-room-timezone, subscribe-push)
-        ├── Calendar     # calendar module (vistas mes/día, sin panel lateral) — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente
+        ├── GlobalSearch # buscador global (modal) — busca en events/notes/listItems ya cargados; onOpenEvent/onOpenNote/onOpenList navegan y abren el módulo correspondiente
+        ├── Calendar     # calendar module (vistas mes/día, sin panel lateral) — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente; jumpToEvent/onJumpHandled = apertura desde la búsqueda global
         │   └── EventModal   # create/edit/delete evento — color de la paleta, recurrencia, hora opcional
-        ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props
-        └── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props
+        ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props; clonar lista (sidebar), anillo de progreso mini en el sidebar; focusListId/onFocusHandled = apertura desde la búsqueda global
+        └── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props; checklist en el cuerpo, fijar nota, contador de palabras/caracteres; focusNoteId/onFocusHandled = apertura desde la búsqueda global
 ```
 
 - `Calendar`, `Lists` y `Notes` son responsive: por debajo del breakpoint móvil (`useIsMobile`, 640px) muestran un solo panel a la vez (toggle sidebar ↔ detalle/calendario) en vez del layout de dos columnas de escritorio
@@ -360,7 +369,7 @@ interface ListItem {
 
 interface Note {
   id: string; room: string; title: string
-  body: string; created_at: string; updated_at: string
+  body: string; pinned: boolean; created_at: string; updated_at: string
   last_editor_name: string | null; last_editor_color: string | null
 }
 ```
@@ -382,10 +391,11 @@ features/
   auth/         RoomEntry (intercala IdentityForm antes de create/join si hace falta), HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
   identity/     identity.ts (Identity, IDENTITY_COLORS, IDENTITY_COLOR_NAMES, getIdentity/get·setGlobalIdentity/get·setRoomOverride/clearRoomOverride — localStorage) + identity.test.ts (entorno jsdom vía `// @vitest-environment jsdom`), IdentityForm (alta única de nombre+color, color vía `ColorPickerPopover`)
   dashboard/    Dashboard (avatares de presencia en el header, con desplegable de nombres/colores al clic) + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
-  calendar/     Calendar (vistas mes/día con FullCalendar — dayGridPlugin + timeGridPlugin; navegación mes→día estilo Google Calendar vía dateClick/eventClick/moreLinkClick="day", ver "Flujo de usuario"; sin panel lateral, botón flotante `.calendar-fab` para nuevo evento; swipe horizontal táctil = prev/next, vía onTouchStart/onTouchEnd) + calendar.css (banner de conflicto de evento + atribución; `.fc-day-today .fc-daygrid-day-number` dimensionado a propósito para ocupar el mismo alto que un número normal — si no, la fila con "hoy" sale más alta que el resto), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar; color vía `ColorPickerPopover` + `EVENT_COLORS`; validación visual solo tras un intento de guardar fallido — `.input-error`/`.field-error` en modal.css — para título vacío y hora de fin ≤ inicio, se desactiva sola en cuanto el dato deja de ser inválido; fechas vía `DateField`, wrapper local sobre `<input type="date"/"month">` que (a) oculta el icono nativo del navegador y superpone uno propio coloreado con `var(--text)` y (b) pinta el propio texto del input transparente y superpone el valor ya formateado `dd/mm/aaaa` — el formato del `<input type="date">` nativo lo decide el locale del navegador, no `lang` del HTML ni nada en CSS, igual que con `<input type="time">` y el porqué de TimeSelect; el `<input>` real sigue ahí intacto (valor, teclado, calendario nativo), solo cambia lo que se lee), eventColors.ts (paleta fija de colores de evento, ~30 tonos con nombre — ver "Colores de evento"), options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros: addDaysToDateStr, isoToLocalDate/Time, buildEventDates, formatLocalDate, localDateKey) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto, usado desde RoomSettings) + ics.test.ts
-  lists/        Lists (título de lista e ítems editables en línea — `<input>`/lápiz al pasar el ratón, Enter/perder el foco guarda, Escape descarta; botón "Vaciar" junto a "Completados · N" para borrar de golpe los ya marcados; anillo de progreso SVG en vez de "N/M" plano, check con un pequeño "pop" al marcarse, aviso breve "¡Lista completada!" al marcar el último ítem — ver nota sobre `prevDone`/ajustar estado durante el render, no en un efecto, para no disparar el aviso al re-abrir una lista ya completa) + lists.css, useLists
+  calendar/     Calendar (vistas mes/día con FullCalendar — dayGridPlugin + timeGridPlugin; navegación mes→día estilo Google Calendar vía dateClick/eventClick/moreLinkClick="day", ver "Flujo de usuario"; sin panel lateral, botón flotante `.calendar-fab` para nuevo evento; swipe horizontal táctil = prev/next, vía onTouchStart/onTouchEnd; `jumpToEvent`/`onJumpHandled` = abrir un evento desde la búsqueda global — abrir el modal es estado derivado de la prop (durante el render), navegar la vista toca `calendarRef` (imperativo) y por eso sigue en un efecto aparte) + calendar.css (banner de conflicto de evento + atribución; `.fc-day-today .fc-daygrid-day-number` dimensionado a propósito para ocupar el mismo alto que un número normal — si no, la fila con "hoy" sale más alta que el resto), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar; color vía `ColorPickerPopover` + `EVENT_COLORS`; validación visual solo tras un intento de guardar fallido — `.input-error`/`.field-error` en modal.css — para título vacío y hora de fin ≤ inicio, se desactiva sola en cuanto el dato deja de ser inválido; fechas vía `DateField`, wrapper local sobre `<input type="date"/"month">` que (a) oculta el icono nativo del navegador y superpone uno propio coloreado con `var(--text)` y (b) pinta el propio texto del input transparente y superpone el valor ya formateado `dd/mm/aaaa` — el formato del `<input type="date">` nativo lo decide el locale del navegador, no `lang` del HTML ni nada en CSS, igual que con `<input type="time">` y el porqué de TimeSelect; el `<input>` real sigue ahí intacto (valor, teclado, calendario nativo), solo cambia lo que se lee), eventColors.ts (paleta fija de colores de evento, ~30 tonos con nombre — ver "Colores de evento"), options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros: addDaysToDateStr, isoToLocalDate/Time, buildEventDates, formatLocalDate, localDateKey) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto, usado desde RoomSettings) + ics.test.ts
+  lists/        Lists (título de lista e ítems editables en línea — `<input>`/lápiz al pasar el ratón, Enter/perder el foco guarda, Escape descarta; botón "Vaciar" junto a "Completados · N" para borrar de golpe los ya marcados; anillo de progreso SVG en vez de "N/M" plano — también en miniatura junto a cada lista del sidebar —, check con un pequeño "pop" al marcarse, aviso breve "¡Lista completada!" al marcar el último ítem — ver nota sobre `prevDone`/ajustar estado durante el render, no en un efecto, para no disparar el aviso al re-abrir una lista ya completa; botón "Clonar" solo en el sidebar (al pasar el ratón — no en la cabecera del detalle, para no duplicar la acción) duplica la lista con sus ítems sin marcar; editar/eliminar un ítem están siempre visibles (no solo al hover — en táctil no hay hover); `focusListId`/`onFocusHandled` = abrir una lista desde la búsqueda global, aplicado durante el render en vez de en un efecto puro de sincronizar prop→estado) + lists.css, useLists
   settings/     RoomSettings (colores de sala como lista de filas `.room-color-row` — donut + nombre + hex, cada `<label>` envuelve su `<input type="color">` real (oculto visualmente, no con `display:none`, para que el navegador delegue el click en todo el área y siga abriendo el selector nativo) + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad" + exportar .ics, vía `../calendar/ics`; sin sección de colores de evento — paleta fija, no configurable) + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
-  notes/        Notes (muestra "Editado por…" en la nota seleccionada; buscador en la barra lateral — filtra por título/cuerpo, cliente, sin red) + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note, adjunta editor_name/editor_color vía getIdentity)
+  notes/        Notes (muestra "Editado por…" en la nota seleccionada; sin buscador propio — lo cubre la búsqueda global del Dashboard; checklist dentro del cuerpo: una línea `- [ ] texto`/`- [x] texto` (helpers puros en checklist.ts — parseChecklistLine/toggleChecklistLine/hasChecklistLine) se renderiza, mientras el textarea no tiene el foco, como una vista con checkboxes clicables en vez de texto plano; tocar la vista fuera de un checkbox vuelve a mostrar el textarea real y la enfoca (useEffect sobre `bodyFocused`); tocar un checkbox NO entra en modo edición, solo alterna esa línea y guarda igual que cualquier cambio de texto; notas sin ninguna línea de checklist siempre muestran el textarea tal cual, sin el modo vista; contador "N palabras · M caracteres" bajo el cuerpo; fijar arriba del todo con `IconPin` en el sidebar (siempre visible, no solo al hover — en táctil no hay hover) vía `toggle-note-pin`, que no toca `updated_at`; orden del sidebar: fijadas primero (el servidor ya manda `pinned DESC, updated_at DESC`); `focusNoteId`/`onFocusHandled` = abrir una nota desde la búsqueda global, aplicado durante el render en vez de en un efecto puro de sincronizar prop→estado) + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note, adjunta editor_name/editor_color vía getIdentity, `togglePin`)
+  search/       GlobalSearch (modal de búsqueda global — input + resultados agrupados por Eventos/Notas/Listas, Escape cierra) + globalSearch.css, search.ts (searchAll: filtro de texto puro, sin red, sobre events/notes/listItems ya cargados; insensible a mayúsculas, tope `perGroupLimit` por sección) + search.test.ts
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar (incluye editor_name/editor_color vía getIdentity, leída fresca en cada reconexión)
   queue.ts              cola de escrituras offline: emitWrite / emitWriteAck encolan si no hay conexión y vacían en orden al recibir `access-granted`
@@ -438,7 +448,8 @@ lib/
 db/
   connection.js       instancia better-sqlite3 (export `db`) + PRAGMA journal_mode=WAL, foreign_keys=ON
   schema.js           createSchema() — CREATE TABLE IF NOT EXISTS + todos los índices (esquema completo, sin ALTER)
-  migrations.js       runMigrations() — stub vacío, reservado para migrar una DB con datos reales en el futuro
+  migrations.js       runMigrations() — addColumnIfMissing(table, column, definition): ALTER TABLE ADD COLUMN si PRAGMA table_info dice que falta (idempotente); hoy añade note.pinned
+  migrations.test.js  unit: crea a mano la tabla `note` con el esquema ANTERIOR (sin la columna nueva, simulando una calendario.db real de antes de este cambio) y comprueba que runMigrations() la añade con un valor por defecto sano; idempotencia
   index.js            initDb() = createSchema + runMigrations; closeDb() = wal_checkpoint(TRUNCATE) + db.close(); barrel de las queries
   rooms.js / events.js / lists.js / notes.js / push.js   queries por dominio (rooms.js: createRoom/verifyRoomAccess/updateRoomTimezone; events.js: updateEvent con concurrencia optimista)
 auth/
@@ -483,7 +494,8 @@ test/
   falla con `ERR_PNPM_IGNORED_BUILDS` de better-sqlite3 aunque el `.node` ya exista.
 - **Tests del cliente** (Vitest): `cd client && pnpm test`. Cubren solo lógica
   pura (sin componentes): `dateUtils.test.ts`, `ics.test.ts`,
-  `password-strength.test.ts`, `color.test.ts`, `relativeTime.test.ts`.
+  `password-strength.test.ts`, `color.test.ts`, `relativeTime.test.ts`,
+  `checklist.test.ts`, `search.test.ts`.
   `vite.config.ts` declara `test.environment: 'node'` (no hace falta DOM para
   estos) — la excepción es `identity.test.ts`, que necesita `localStorage`
   real y por eso fija `// @vitest-environment jsdom` en su propia cabecera.
@@ -492,7 +504,7 @@ test/
   excepción se loguea (`logger.error('socket:<event>', err)`) y emite su evento de
   error al cliente (`event-error`/`list-error`/`note-error`/`room-error`/`access-denied`/`push-error`),
   nunca tumba el proceso. Nada de `console.*` en el server salvo el mensaje fatal de `env.js`.
-- **Autorización por sala:** los 12 handlers de escritura/lectura de datos van por
+- **Autorización por sala:** los 14 handlers de escritura/lectura de datos van por
   `safeAuthedOn` → un socket que no hizo `join-room`/`create-room` para esa sala no
   puede actuar sobre ella (rechazo silencioso). `update-room-style` lo comprueba a
   mano (su clave de sala es `name`). `unsubscribe-push` exige solo estar autenticado

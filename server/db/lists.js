@@ -69,6 +69,29 @@ export function updateListItemText(id, text) {
   return toClientItem(db.prepare('SELECT * FROM list_item WHERE id = ?').get(id))
 }
 
+// Duplica una lista con todos sus ítems, sin marcar — plantilla rápida para
+// listas recurrentes (p. ej. "Compra semanal").
+export function cloneList(id) {
+  const original = db.prepare('SELECT * FROM list WHERE id = ?').get(id)
+  if (!original) return null
+  const items = db.prepare('SELECT * FROM list_item WHERE list_id = ? ORDER BY created_at ASC').all(id)
+  const newId = randomUUID()
+  const now = new Date().toISOString()
+  const title = `${original.title} (copia)`
+  const newItems = []
+  db.transaction(() => {
+    db.prepare('INSERT INTO list (id, room, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(newId, original.room, title, now, now)
+    const ins = db.prepare('INSERT INTO list_item (id, list_id, room, text, checked, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)')
+    for (const it of items) {
+      const itemId = randomUUID()
+      ins.run(itemId, newId, original.room, it.text, now, now)
+      newItems.push({ id: itemId, list_id: newId, room: original.room, text: it.text, checked: false })
+    }
+  })()
+  return { list: { id: newId, room: original.room, title, created_at: now }, items: newItems }
+}
+
 // Borra los ítems ya marcados de una lista ("vaciar completados"). Devuelve
 // las filas completas (no la forma de cliente) porque se usan para el
 // tombstone de deshacer, igual que deleteListItem.

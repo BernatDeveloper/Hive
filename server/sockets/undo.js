@@ -28,8 +28,7 @@ export function registerUndoHandlers(io, socket) {
         broadcast(io, room, 'list-item-created', itemForClient(it))
       }
     } else if (entry.kind === 'note') {
-      restoreNote(entry.note)
-      broadcast(io, room, 'note-created', entry.note)
+      broadcast(io, room, 'note-created', restoreNote(entry.note))
     }
 
     ack?.({ ok: true })

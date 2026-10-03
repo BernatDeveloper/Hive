@@ -82,6 +82,9 @@
 .lists-sidebar-item--active .lists-sidebar-item-title { color: var(--primary); }
 
 .lists-sidebar-item-count {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
   font-size: 0.73rem;
   color: var(--muted);
   font-weight: 400;
@@ -105,12 +108,14 @@
   opacity: 0;
   transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-.lists-sidebar-item:hover .lists-delete-btn,
-.lists-item-row:hover .lists-delete-btn { opacity: 1; }
+.lists-sidebar-item:hover .lists-delete-btn { opacity: 1; }
 .lists-delete-btn--visible { opacity: 1; }
 .lists-delete-btn:hover { color: var(--danger); background: rgba(255, 59, 48, 0.08); }
+/* Dentro de un ítem, siempre visible (no solo al hover): en táctil no hay
+   hover, y quedaban invisibles sin forma de verlas/tocarlas. */
+.lists-item-row .lists-delete-btn { opacity: 1; }
 
-.lists-edit-btn {
+.lists-clone-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -126,7 +131,25 @@
   opacity: 0;
   transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-.lists-item-row:hover .lists-edit-btn { opacity: 1; }
+.lists-sidebar-item:hover .lists-clone-btn { opacity: 1; }
+.lists-clone-btn:hover { color: var(--primary); background: var(--surface-2); }
+
+/* Siempre visible (no solo al hover): en táctil no hay hover. */
+.lists-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
 .lists-edit-btn:hover { color: var(--primary); background: var(--surface-2); }
 
 .lists-new-form {
@@ -267,12 +290,21 @@
 
 .lists-item-text {
   flex: 1;
+  display: flex;
+  align-items: center;
   font-size: 0.9rem;
   color: var(--text);
   cursor: pointer;
   line-height: 1.4;
   word-break: break-word;
   user-select: none;
+  /* El padding vertical de .lists-item-row queda FUERA de este <span> — solo
+     su propia caja (altura de línea) responde al clic, dejando una franja
+     muerta arriba/abajo en cada fila. El margen negativo + padding igual
+     "reclama" esa franja para el span (la caja crece hacia el padding de la
+     fila) sin mover el texto ni un píxel. */
+  margin: -0.55rem 0;
+  padding: 0.55rem 0;
 }
 .lists-item-text--done {
   text-decoration: line-through;
@@ -375,6 +407,6 @@
   .lists-new-form { padding: 0 0.5rem; }
   .lists-section-header { padding: 0.5rem 1rem 0.25rem; }
   .lists-section-divider { margin: 0.5rem 1rem; }
-  .lists-delete-btn, .lists-edit-btn { opacity: 1; }
+  .lists-delete-btn, .lists-edit-btn, .lists-clone-btn { opacity: 1; }
   .lists-celebrate { margin: 0.6rem 1rem 0; }
 }

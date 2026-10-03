@@ -9,11 +9,16 @@ interface Props {
   onCreateList: (title: string) => void
   onUpdateListTitle: (id: string, title: string) => void
   onDeleteList: (id: string) => void
+  onCloneList: (id: string) => void
   onCreateItem: (listId: string, text: string) => void
   onToggleItem: (id: string, checked: boolean) => void
   onUpdateItemText: (id: string, text: string) => void
   onDeleteItem: (id: string) => void
   onClearCompleted: (listId: string) => void
+  // Abrir una lista desde fuera (búsqueda global); `onFocusHandled` limpia el
+  // "pedido" en el padre para no reabrirla en cada re-render.
+  focusListId?: string | null
+  onFocusHandled?: () => void
 }
 
 const IconCheck = () => (
@@ -41,6 +46,13 @@ const IconEdit = () => (
 const IconChevronLeft = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <polyline points="15 18 9 12 15 6"/>
+  </svg>
+)
+
+const IconCopy = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="13" height="13" rx="2"/>
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
   </svg>
 )
 
@@ -84,9 +96,10 @@ interface ItemRowProps {
 }
 
 // Fila de ítem: toque en el texto = marcar/desmarcar (como siempre); el lápiz
-// la cambia a modo edición (un <input> sustituye al <span>, sin botones al
-// lado — Enter/perder el foco guarda, Escape descarta). El check tiene un
-// pequeño "pop" al marcarse (ver .lists-check--on en lists.css).
+// la cambia a modo edición (un <input> sustituye al <span> — Enter/perder el
+// foco guarda, Escape descarta). El check tiene un pequeño "pop" al marcarse
+// (ver .lists-check--on en lists.css). Editar/eliminar están siempre
+// visibles (no solo al hover: en táctil no hay hover y quedaban invisibles).
 function ItemRow({ item, editing, editText, onStartEdit, onEditTextChange, onCommitEdit, onCancelEdit, onToggle, onDelete }: ItemRowProps) {
   return (
     <div className={`lists-item-row${item.checked ? ' lists-item-row--checked' : ''}`}>
@@ -130,8 +143,9 @@ function ItemRow({ item, editing, editText, onStartEdit, onEditTextChange, onCom
 }
 
 export default function Lists({
-  lists, listItems, onCreateList, onUpdateListTitle, onDeleteList,
+  lists, listItems, onCreateList, onUpdateListTitle, onDeleteList, onCloneList,
   onCreateItem, onToggleItem, onUpdateItemText, onDeleteItem, onClearCompleted,
+  focusListId, onFocusHandled,
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [newListTitle, setNewListTitle] = useState('')
@@ -188,6 +202,30 @@ export default function Lists({
     setTimeout(() => newItemRef.current?.focus(), 80)
   }
 
+  // Resultado de la búsqueda global: abre la lista como si se hubiera
+  // tocado en la barra lateral. Se aplica durante el render (mismo patrón
+  // que prevDone/celebrateListId) en vez de en un efecto puro de
+  // "sincronizar estado con una prop" — un efecto separado solo avisa al
+  // padre que ya se consumió el pedido.
+  const [appliedFocusListId, setAppliedFocusListId] = useState<string | null>(null)
+  if (focusListId && focusListId !== appliedFocusListId) {
+    setAppliedFocusListId(focusListId)
+    // Inline en vez de handleSelectList: esa función toca newItemRef (para
+    // enfocar el campo de nuevo ítem), y una llamada que accede a un ref no
+    // puede hacerse desde el cuerpo del render.
+    if (focusListId !== selectedId) {
+      setSelectedId(focusListId)
+      setTitleDraft(lists.find(l => l.id === focusListId)?.title ?? '')
+      setNewItemText('')
+      setEditingItemId(null)
+      if (isMobile) setMobilePage('detail')
+    }
+  }
+
+  useEffect(() => {
+    if (focusListId) onFocusHandled?.()
+  }, [focusListId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function commitTitle() {
     if (!selectedList) return
     const t = titleDraft.trim()
@@ -227,6 +265,10 @@ export default function Lists({
 
   function cancelEditItem() {
     setEditingItemId(null)
+  }
+
+  function handleCloneList(id: string) {
+    onCloneList(id)
   }
 
   const selectedList = lists.find(l => l.id === selectedId) ?? null
@@ -270,8 +312,18 @@ export default function Lists({
               >
                 <span className="lists-sidebar-item-title">{list.title}</span>
                 {items.length > 0 && (
-                  <span className="lists-sidebar-item-count">{done}/{items.length}</span>
+                  <span className="lists-sidebar-item-count">
+                    <ProgressRing done={done} total={items.length} color="var(--primary)" />
+                    {done}/{items.length}
+                  </span>
                 )}
+              </button>
+              <button
+                className="lists-clone-btn"
+                onClick={() => handleCloneList(list.id)}
+                aria-label={`Clonar lista ${list.title}`}
+              >
+                <IconCopy />
               </button>
               <button
                 className="lists-delete-btn"

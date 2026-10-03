@@ -47,5 +47,6 @@ export function useNotes(room: string, initial: Note[]) {
       }, { status: 'timeout' })
     },
     deleteNote: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-note', { room, id }, {}),
+    togglePin: (id: string, pinned: boolean) => emitWrite('toggle-note-pin', { room, id, pinned }),
   }
 }

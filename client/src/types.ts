@@ -66,6 +66,7 @@ export interface Note {
   room: string
   title: string
   body: string
+  pinned: boolean
   created_at: string
   updated_at: string
   last_editor_name: string | null

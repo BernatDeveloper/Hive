@@ -1,5 +1,5 @@
 import {
-  createList, updateListTitle, deleteList,
+  createList, updateListTitle, deleteList, cloneList,
   createListItem, toggleListItem, updateListItemText, clearCompletedItems, deleteListItem,
 } from '../db/index.js'
 import { stash } from '../services/undo.js'
@@ -30,6 +30,14 @@ export function registerListHandlers(io, socket) {
     if (!list) return
     broadcast(io, room, 'list-deleted', id)
     ack?.({ undoToken: stash(room, { kind: 'list', list, items }), label: `Lista «${list.title}»` })
+  })
+
+  // Duplica una lista con sus ítems (sin marcar) — plantilla rápida.
+  safeAuthedOn(socket, 'clone-list', 'list-error', { message: 'No se pudo clonar la lista' }, ({ room, id }) => {
+    if (!str(id, MAX.id)) return
+    const result = cloneList(id)
+    if (!result) return
+    broadcast(io, room, 'list-cloned', result)
   })
 
   safeAuthedOn(socket, 'create-list-item', 'list-error', { message: 'No se pudo añadir el ítem' }, ({ room, listId, text }) => {

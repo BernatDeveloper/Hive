@@ -4,12 +4,18 @@ import type { Note } from '../../types'
 import type { UpdateNoteResult } from './useNotes'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { formatRelativeTime } from '../../shared/relativeTime'
+import { parseChecklistLine, toggleChecklistLine, hasChecklistLine } from './checklist'
 
 interface Props {
   notes: Note[]
   onCreateNote: () => void
   onUpdateNote: (id: string, title: string, body: string, updatedAt: string) => Promise<UpdateNoteResult>
   onDeleteNote: (id: string) => void
+  onTogglePin: (id: string, pinned: boolean) => void
+  // Abrir una nota desde fuera (búsqueda global); `onFocusHandled` limpia el
+  // "pedido" en el padre para no reabrirla en cada re-render.
+  focusNoteId?: string | null
+  onFocusHandled?: () => void
 }
 
 const IconTrash = () => (
@@ -43,14 +49,31 @@ const IconNotesPlaceholder = () => (
   </svg>
 )
 
-export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote }: Props) {
+const IconPin = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 17v5"/>
+    <path d="M9 3h6l1 6 3 3v2H6v-2l3-3z"/>
+  </svg>
+)
+
+const IconCheckSmall = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+)
+
+export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote, onTogglePin, focusNoteId, onFocusHandled }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
   const [localTitle, setLocalTitle] = useState('')
   const [localBody, setLocalBody] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [conflict, setConflict] = useState<Note | null>(null)
   const [mobilePage, setMobilePage] = useState<'notes' | 'detail'>('notes')
+  // Mientras el cuerpo no tiene el foco, si hay al menos una línea de
+  // checklist se muestra la vista "renderizada" (checkboxes clicables) en
+  // vez del textarea plano; tocarla (fuera de un checkbox) vuelve a editar.
+  const [bodyFocused, setBodyFocused] = useState(false)
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const prevNotesRef = useRef<Note[]>(notes)
   // Versión (updated_at) + contenido sobre los que se basan las ediciones
@@ -78,9 +101,16 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
       setLocalTitle(note.title)
       setLocalBody(note.body)
       setSaveStatus('idle')
+      setBodyFocused(false)
       baseRef.current = { updated_at: note.updated_at, title: note.title, body: note.body }
     }
   }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Enfoca el textarea real al entrar en modo edición desde la vista
+  // renderizada (ver notes-body-view más abajo).
+  useEffect(() => {
+    if (bodyFocused) bodyRef.current?.focus()
+  }, [bodyFocused])
 
   const selectedNote = notes.find(n => n.id === selectedId) ?? null
 
@@ -103,6 +133,21 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
     setConflict(null)
     if (isMobile) setMobilePage('detail')
   }
+
+  // Resultado de la búsqueda global: abre la nota como si se hubiera tocado
+  // en la barra lateral. Se aplica durante el render (mismo patrón que la
+  // celebración de listas) en vez de en un efecto puro de "sincronizar
+  // estado con una prop" — un efecto separado solo avisa al padre que ya se
+  // consumió el pedido.
+  const [appliedFocusNoteId, setAppliedFocusNoteId] = useState<string | null>(null)
+  if (focusNoteId && focusNoteId !== appliedFocusNoteId) {
+    setAppliedFocusNoteId(focusNoteId)
+    if (focusNoteId !== selectedId) selectNote(focusNoteId)
+  }
+
+  useEffect(() => {
+    if (focusNoteId) onFocusHandled?.()
+  }, [focusNoteId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clear pending timer on unmount
   useEffect(() => () => {
@@ -151,6 +196,18 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
     scheduleSave(localTitle, val)
   }
 
+  // Toca un checkbox de checklist en la vista renderizada: no entra en modo
+  // edición, solo alterna esa línea y guarda como cualquier otro cambio.
+  function toggleChecklistAt(lineIndex: number) {
+    const lines = localBody.split('\n')
+    lines[lineIndex] = toggleChecklistLine(lines[lineIndex])
+    handleBodyChange(lines.join('\n'))
+  }
+
+  function enterBodyEdit() {
+    setBodyFocused(true)
+  }
+
   function handleCreate() {
     onCreateNote()
   }
@@ -164,11 +221,12 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
   }
 
   const showConflict = conflict !== null && conflict.id === selectedId
+  const hasChecklist = hasChecklistLine(localBody)
+  const wordCount = localBody.trim() ? localBody.trim().split(/\s+/).length : 0
 
-  const trimmedQuery = query.trim().toLowerCase()
-  const filteredNotes = trimmedQuery
-    ? notes.filter(n => n.title.toLowerCase().includes(trimmedQuery) || n.body.toLowerCase().includes(trimmedQuery))
-    : notes
+  // Fijadas primero; dentro de cada grupo se conserva el orden recibido
+  // (el servidor ya manda pinned desc, updated_at desc).
+  const sortedNotes = [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned))
 
   // ─── Sidebar ────────────────────────────────────────────
   const sidebar = (
@@ -180,31 +238,23 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
         </button>
       </div>
 
-      {notes.length > 0 && (
-        <div className="notes-search-wrap">
-          <input
-            type="text"
-            className="notes-search"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar notas…"
-            aria-label="Buscar notas"
-          />
-        </div>
-      )}
-
       <div className="notes-sidebar-scroll">
         {notes.length === 0 && (
           <p className="notes-sidebar-empty">Crea tu primera nota</p>
         )}
-        {notes.length > 0 && filteredNotes.length === 0 && (
-          <p className="notes-sidebar-empty">Sin resultados para «{query.trim()}»</p>
-        )}
-        {filteredNotes.map(note => (
+        {sortedNotes.map(note => (
           <div
             key={note.id}
             className={`notes-sidebar-item ${note.id === selectedId ? 'notes-sidebar-item--active' : ''}`}
           >
+            <button
+              className={`notes-pin-btn${note.pinned ? ' notes-pin-btn--on' : ''}`}
+              onClick={() => onTogglePin(note.id, !note.pinned)}
+              aria-label={note.pinned ? 'Desfijar nota' : 'Fijar nota'}
+              aria-pressed={note.pinned}
+            >
+              <IconPin />
+            </button>
             <button
               className="notes-sidebar-item-btn"
               onClick={() => selectNote(note.id)}
@@ -285,12 +335,50 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote 
             </div>
           )}
 
-          <textarea
-            className="notes-body"
-            value={localBody}
-            onChange={e => handleBodyChange(e.target.value)}
-            placeholder="Empieza a escribir…"
-          />
+          {(bodyFocused || !hasChecklist) ? (
+            <textarea
+              ref={bodyRef}
+              className="notes-body"
+              value={localBody}
+              onChange={e => handleBodyChange(e.target.value)}
+              onFocus={() => setBodyFocused(true)}
+              onBlur={() => setBodyFocused(false)}
+              placeholder="Empieza a escribir…"
+            />
+          ) : (
+            <div
+              className="notes-body notes-body-view"
+              role="button"
+              tabIndex={0}
+              aria-label="Editar contenido"
+              onClick={enterBodyEdit}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); enterBodyEdit() } }}
+            >
+              {localBody.split('\n').map((line, i) => {
+                const parsed = parseChecklistLine(line)
+                if (parsed) {
+                  return (
+                    <div key={i} className="notes-checklist-line">
+                      <button
+                        type="button"
+                        className={`notes-checklist-box${parsed.checked ? ' notes-checklist-box--on' : ''}`}
+                        onClick={e => { e.stopPropagation(); toggleChecklistAt(i) }}
+                        aria-label={parsed.checked ? 'Desmarcar' : 'Marcar'}
+                      >
+                        {parsed.checked && <IconCheckSmall />}
+                      </button>
+                      <span className={parsed.checked ? 'notes-checklist-text--done' : ''}>{parsed.text || ' '}</span>
+                    </div>
+                  )
+                }
+                return <div key={i} className="notes-body-line">{line || ' '}</div>
+              })}
+            </div>
+          )}
+
+          <div className="notes-footer">
+            {wordCount} palabra{wordCount === 1 ? '' : 's'} · {localBody.length} carácter{localBody.length === 1 ? '' : 'es'}
+          </div>
         </>
       )}
     </section>

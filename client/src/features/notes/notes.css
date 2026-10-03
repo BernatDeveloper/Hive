@@ -43,16 +43,6 @@
   flex-shrink: 0;
 }
 
-.notes-search-wrap {
-  padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.notes-search {
-  font-size: 0.82rem;
-  padding: 0.45rem 0.65rem;
-}
-
 .notes-sidebar-scroll {
   flex: 1;
   overflow-y: auto;
@@ -131,6 +121,26 @@
 .notes-sidebar-item:hover .notes-delete-btn { opacity: 1; }
 .notes-delete-btn--visible { opacity: 1; }
 .notes-delete-btn:hover { color: var(--danger); background: rgba(255, 59, 48, 0.08); }
+
+/* Siempre visible (no solo al hover): en móvil no hay hover, y fijada es un
+   estado que debe verse de un vistazo sin tocar la fila. */
+.notes-pin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  margin-left: 0.15rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.notes-pin-btn:hover { background: var(--surface-2); }
+.notes-pin-btn--on { color: var(--primary); }
 
 /* ─── Detail panel ─── */
 .notes-detail {
@@ -230,6 +240,52 @@
 }
 .notes-body::placeholder { color: var(--muted); }
 
+/* Vista renderizada (cuando hay checklist y el textarea no tiene el foco):
+   mismo padding/tamaño/line-height que .notes-body para que la transición al
+   textarea no salte. Tocar fuera de un checkbox vuelve a editar. */
+.notes-body-view {
+  cursor: text;
+}
+.notes-body-line {
+  min-height: 1.7em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.notes-checklist-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 1.7em;
+}
+.notes-checklist-box {
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  margin-top: 0.15em;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--primary-text);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.notes-checklist-box:hover { border-color: var(--primary); }
+.notes-checklist-box--on { background: var(--primary); border-color: var(--primary); }
+.notes-checklist-text--done { text-decoration: line-through; color: var(--muted); }
+
+.notes-footer {
+  flex-shrink: 0;
+  padding: 0.4rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: right;
+}
+
 /* ─── Empty state ─── */
 .notes-empty {
   display: flex;
@@ -261,5 +317,6 @@
   .notes-sidebar-scroll { padding: 0.35rem; }
   .notes-detail-header { padding: 0 0.75rem 0 1rem; }
   .notes-body { padding: 1rem; }
+  .notes-footer { padding: 0.4rem 1rem; }
   .notes-delete-btn { opacity: 1; }
 }
