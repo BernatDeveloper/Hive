@@ -1,12 +1,5 @@
 .settings-modal { max-width: 480px; }
 
-.settings-presets {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.1rem 0;
-}
-
 .settings-presets-label {
   font-size: 0.72rem;
   font-weight: 600;
@@ -53,45 +46,74 @@
 .preset-swatch--light { background: #F5F5F7; }
 .preset-swatch--dark  { background: #1C1C1E; }
 
-.settings-colors {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  margin: 0.25rem 0;
-}
-
-.color-picker-item {
+/* Colores de la sala: una fila por color, con un <label> envolviendo el
+   <input type="color"> real (así el navegador delega el click/tap en todo
+   el área al control, sin necesitar overlays posicionados a mano). El
+   donut es decorativo (centro hueco, igual lenguaje visual que los demás
+   selectores de color de la app); el input real queda visualmente oculto
+   pero sigue en el DOM — funcional, accesible, con foco visible. */
+.room-colors-list {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
+  gap: 0.15rem;
+  margin-top: 0.75rem;
 }
 
-.color-picker-control {
+.room-color-row {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-}
-
-.color-picker-control input[type="color"] {
-  width: 40px;
-  height: 36px;
-  padding: 3px;
+  gap: 0.85rem;
+  padding: 0.55rem 0.4rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  transition: background var(--transition-fast);
+}
+.room-color-row:hover { background: var(--surface-2); }
+.room-color-row:has(.room-color-input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
-.color-value {
+.room-color-donut {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 6px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Visualmente oculto (no display:none — algunos navegadores no abren el
+   selector nativo al activar una etiqueta sobre un input con display:none),
+   sigue siendo focuseable y clicable. */
+.room-color-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  border: none;
+  opacity: 0;
+}
+
+.room-color-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.room-color-name {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.room-color-hex {
   font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   color: var(--muted);
 }
 
@@ -170,6 +192,5 @@
 .settings-row--danger:hover { background: rgba(255, 59, 48, 0.08); }
 
 @media (max-width: 640px) {
-  .settings-colors { grid-template-columns: 1fr; gap: 1rem; }
   .settings-preview { padding: 0.85rem; }
 }

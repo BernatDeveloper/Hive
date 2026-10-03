@@ -10,7 +10,7 @@
   gap: 0.75rem;
   padding: 0.5rem 1rem;
   background: var(--primary, #3B82F6);
-  color: #fff;
+  color: var(--primary-text, #fff);
   font-size: 0.85rem;
   font-weight: 500;
   box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));

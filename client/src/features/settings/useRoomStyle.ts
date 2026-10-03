@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { socket } from '../../socket'
-import { isColorDark } from '../../shared/color'
+import { hexToRgb, isColorDark, readableTextColor } from '../../shared/color'
 import type { Room } from '../../types'
 
 const DEFAULTS = {
@@ -63,8 +63,17 @@ export function useRoomStyle(room: Room, onUpdateRoom: (room: Room) => void) {
   }, [onUpdateRoom])
 
   const dark = isColorDark(colors.background_color)
+  const primary = colors.primary_color ?? DEFAULTS.primary
   const cssVars = {
-    '--primary': colors.primary_color ?? DEFAULTS.primary,
+    '--primary': primary,
+    '--primary-rgb': hexToRgb(primary),
+    // Texto legible sobre un relleno sólido del primario — p. ej. la vista
+    // previa ("mirror") que pinta FullCalendar mientras arrastras para crear
+    // un evento en la vista día: no corresponde a ningún evento real, así
+    // que no hay un backgroundColor/textColor calculado (como sí tiene
+    // fcEvents) del que tirar; esta es la única forma de que un primario
+    // claro (p. ej. un lima) no quede con texto blanco ilegible encima.
+    '--primary-text': readableTextColor(primary),
     '--bg': colors.background_color ?? DEFAULTS.bg,
     '--text': colors.text_color ?? DEFAULTS.text,
     '--surface': colors.sidebar_color ?? DEFAULTS.surface,

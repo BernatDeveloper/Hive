@@ -199,7 +199,14 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
           events={fcEvents}
           locale="es"
           locales={[esLocale]}
-          eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          // Solo el título en la etiqueta del evento, con o sin hora — la
+          // posición en la rejilla de la vista día ya transmite la hora, y
+          // en vista mes solo añadía ruido.
+          displayEventTime={false}
+          // En móvil, "diciembre de 2026" no cabe en una línea junto a los
+          // botones del header y se parte en dos, descuadrando todo el
+          // toolbar — una versión corta ("dic 2026") siempre cabe.
+          titleFormat={isMobile ? { month: 'short', year: 'numeric' } : { month: 'long', year: 'numeric' }}
           height="100%"
           headerToolbar={{
             left: 'prev,next today',

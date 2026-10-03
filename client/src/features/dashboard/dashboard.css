@@ -176,7 +176,7 @@
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
 }
-.btn-back-module:hover { background: rgba(59, 130, 246, 0.06); }
+.btn-back-module:hover { background: rgba(var(--primary-rgb), 0.06); }
 
 @media (max-width: 640px) {
   .dashboard { height: 100dvh; }

@@ -158,9 +158,9 @@ export default function RoomSettings({ room, events, onClose, onLeave }: Props) 
         <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">×</button>
         <h3>Ajustes de sala — {room.name}</h3>
 
-        <div className="settings-presets">
-          <span className="settings-presets-label">Presets</span>
-          <div className="settings-presets-btns">
+        <div className="settings-section">
+          <span className="settings-presets-label">Colores de la sala</span>
+          <div className="settings-presets-btns" style={{ marginTop: '0.55rem' }}>
             <button className="settings-preset-btn" onClick={() => applyPreset('light')}>
               <span className="preset-swatch preset-swatch--light" />
               Claro
@@ -170,27 +170,29 @@ export default function RoomSettings({ room, events, onClose, onLeave }: Props) 
               Oscuro
             </button>
           </div>
-        </div>
-
-        <div className="settings-colors">
-          {([
-            ['primary_color', 'Color primario'],
-            ['background_color', 'Fondo'],
-            ['text_color', 'Texto'],
-            ['sidebar_color', 'Superficie'],
-          ] as const).map(([key, label]) => (
-            <div key={key} className="color-picker-item">
-              <label>{label}</label>
-              <div className="color-picker-control">
+          <div className="room-colors-list">
+            {([
+              ['primary_color', 'Color primario'],
+              ['background_color', 'Fondo'],
+              ['text_color', 'Texto'],
+              ['sidebar_color', 'Superficie'],
+            ] as const).map(([key, label]) => (
+              <label key={key} className="room-color-row">
+                <span className="room-color-donut" style={{ borderColor: colors[key] }} aria-hidden="true" />
                 <input
                   type="color"
+                  className="room-color-input"
                   value={colors[key]}
                   onChange={e => change(key, e.target.value)}
+                  aria-label={label}
                 />
-                <span className="color-value">{colors[key]}</span>
-              </div>
-            </div>
-          ))}
+                <span className="room-color-text">
+                  <span className="room-color-name">{label}</span>
+                  <span className="room-color-hex">{colors[key].toUpperCase()}</span>
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="settings-section">
@@ -299,7 +301,7 @@ export default function RoomSettings({ room, events, onClose, onLeave }: Props) 
             <IconDownload />
           </button>
           <button type="button" className="settings-row" onClick={() => applyPreset('light')}>
-            <span>Restablecer</span>
+            <span>Restablecer colores</span>
             <IconRefresh />
           </button>
           <button type="button" className="settings-row settings-row--danger" onClick={onLeave}>
