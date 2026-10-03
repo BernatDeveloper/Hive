@@ -42,7 +42,6 @@ export interface Room {
   background_color: string | null
   text_color: string | null
   sidebar_color: string | null
-  event_colors: string[]   // paleta de colores de evento definida en Ajustes
   timezone: string   // zona IANA; gobierna cuándo disparan los recordatorios, no el display
   created_at?: string
 }

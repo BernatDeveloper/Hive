@@ -3,14 +3,22 @@ import '../../shared/modal.css'
 import './room-settings.css'
 import { socket, emitWrite } from '../../socket'
 import { subscribeToPush, getCurrentSubscription } from '../../push'
-import type { Room } from '../../types'
+import type { Event, Room } from '../../types'
 import {
-  getIdentity, getRoomOverride, setGlobalIdentity, setRoomOverride, clearRoomOverride, IDENTITY_COLORS,
+  getIdentity, getRoomOverride, setGlobalIdentity, setRoomOverride, clearRoomOverride,
+  IDENTITY_COLORS, IDENTITY_COLOR_NAMES,
 } from '../identity/identity'
-import '../identity/identity.css'
+import { downloadICS } from '../calendar/ics'
+import ColorPickerPopover from '../../shared/ColorPickerPopover'
+import type { ColorOption } from '../../shared/ColorPickerPopover'
+import { useSwipeToDismiss } from '../../shared/useSwipeToDismiss'
+import SelectPopover from '../../shared/SelectPopover'
+
+const IDENTITY_COLOR_OPTIONS: ColorOption[] = IDENTITY_COLORS.map(c => ({ value: c, name: IDENTITY_COLOR_NAMES[c] ?? c }))
 
 interface Props {
   room: Room
+  events: Event[]
   onClose: () => void
   onLeave: () => void
 }
@@ -30,9 +38,17 @@ const IconLogOut = () => (
   </svg>
 )
 
+const IconDownload = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+)
+
 const PRESETS = {
   light: {
-    primary_color: '#0071E3',
+    primary_color: '#3B82F6',
     background_color: '#F5F5F7',
     text_color: '#1D1D1F',
     sidebar_color: '#FFFFFF',
@@ -45,10 +61,6 @@ const PRESETS = {
   },
 }
 
-const MAX_EVENT_COLORS = 8
-// Colores que propone "+ Añadir" antes de que el usuario los ajuste.
-const SUGGESTED_COLORS = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff375f', '#ff453a', '#64d2ff', '#ffd60a']
-
 // `Intl.supportedValuesOf` no existe en navegadores muy antiguos (Safari
 // < 15.4): si falta, al menos se ofrece la zona actual del dispositivo.
 const TIMEZONES: string[] = (() => {
@@ -58,8 +70,10 @@ const TIMEZONES: string[] = (() => {
     return [Intl.DateTimeFormat().resolvedOptions().timeZone]
   }
 })()
+const TIMEZONE_OPTIONS = TIMEZONES.map(tz => ({ value: tz, label: tz }))
 
-export default function RoomSettings({ room, onClose, onLeave }: Props) {
+export default function RoomSettings({ room, events, onClose, onLeave }: Props) {
+  const swipe = useSwipeToDismiss(onClose)
   const [colors, setColors] = useState({
     primary_color: room.primary_color ?? PRESETS.light.primary_color,
     background_color: room.background_color ?? PRESETS.light.background_color,
@@ -67,7 +81,6 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
     sidebar_color: room.sidebar_color ?? PRESETS.light.sidebar_color,
   })
 
-  const [eventColors, setEventColors] = useState<string[]>(room.event_colors ?? [])
   const [timezone, setTimezone] = useState(room.timezone)
 
   const currentIdentity = getIdentity(room.name)
@@ -83,20 +96,8 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
     setColors({ ...PRESETS[preset] })
   }
 
-  function changeEventColor(index: number, value: string) {
-    setEventColors(prev => prev.map((c, i) => (i === index ? value.toLowerCase() : c)))
-  }
-
-  function removeEventColor(index: number) {
-    setEventColors(prev => prev.filter((_, i) => i !== index))
-  }
-
-  function addEventColor() {
-    setEventColors(prev => [...prev, SUGGESTED_COLORS[prev.length % SUGGESTED_COLORS.length]])
-  }
-
   function save() {
-    emitWrite('update-room-style', { name: room.name, styles: { ...colors, event_colors: eventColors } })
+    emitWrite('update-room-style', { name: room.name, styles: colors })
     // Evento propio (no se mezcla con update-room-style): solo se emite si
     // realmente cambió, para no generar tráfico/broadcast de más.
     if (timezone !== room.timezone) {
@@ -152,7 +153,9 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal settings-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal settings-modal" style={swipe.style} onClick={e => e.stopPropagation()}>
+        <div className="modal-drag-handle" {...swipe.handleProps} />
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">×</button>
         <h3>Ajustes de sala — {room.name}</h3>
 
         <div className="settings-presets">
@@ -191,45 +194,17 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
         </div>
 
         <div className="settings-section">
-          <div className="settings-event-colors-head">
-            <span className="settings-presets-label">Colores de eventos</span>
-            {eventColors.length < MAX_EVENT_COLORS && (
-              <button type="button" className="settings-preset-btn" onClick={addEventColor}>+ Añadir</button>
-            )}
+          <span className="settings-presets-label">Zona horaria de la sala</span>
+          <div style={{ marginTop: '0.45rem' }}>
+            <SelectPopover
+              options={TIMEZONE_OPTIONS}
+              value={timezone}
+              onChange={setTimezone}
+              triggerLabel="Zona horaria de la sala"
+              searchable
+              searchPlaceholder="Buscar zona horaria…"
+            />
           </div>
-          {eventColors.length === 0 ? (
-            <p className="settings-notify-text" style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>
-              Sin colores. Los eventos usarán el color primario de la sala.
-            </p>
-          ) : (
-            <div className="settings-event-colors">
-              {eventColors.map((c, i) => (
-                <div key={i} className="settings-event-color">
-                  <input
-                    type="color"
-                    value={c}
-                    onChange={e => changeEventColor(i, e.target.value)}
-                    aria-label={`Color de evento ${i + 1}`}
-                  />
-                  <button
-                    type="button"
-                    className="settings-event-color-remove"
-                    onClick={() => removeEventColor(i)}
-                    aria-label={`Quitar color ${i + 1}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="settings-section">
-          <label className="settings-presets-label" htmlFor="room-timezone">Zona horaria de la sala</label>
-          <select id="room-timezone" value={timezone} onChange={e => setTimezone(e.target.value)}>
-            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-          </select>
           <p className="settings-notify-text" style={{ fontSize: '0.76rem', color: 'var(--muted)', marginTop: '0.4rem' }}>
             Gobierna a qué hora llegan los avisos de recordatorio — no cambia cómo se ven las horas en el calendario.
           </p>
@@ -262,18 +237,13 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
             placeholder="Tu nombre"
             maxLength={40}
           />
-          <div className="identity-colors" style={{ marginTop: '0.6rem' }}>
-            {IDENTITY_COLORS.map(c => (
-              <button
-                key={c}
-                type="button"
-                className={`identity-color-swatch${identityColor === c ? ' identity-color-swatch--on' : ''}`}
-                style={{ background: c }}
-                onClick={() => setIdentityColor(c)}
-                aria-label={`Color ${c}`}
-                aria-pressed={identityColor === c}
-              />
-            ))}
+          <div style={{ marginTop: '0.6rem' }}>
+            <ColorPickerPopover
+              options={IDENTITY_COLOR_OPTIONS}
+              value={identityColor}
+              onChange={c => setIdentityColor(c ?? IDENTITY_COLORS[0])}
+              triggerLabel="Elegir tu color"
+            />
           </div>
           <div className="settings-notify-row" style={{ marginTop: '0.7rem' }}>
             <div className="settings-notify-text">
@@ -319,6 +289,15 @@ export default function RoomSettings({ room, onClose, onLeave }: Props) {
         </div>
 
         <div className="settings-list">
+          <button
+            type="button"
+            className="settings-row"
+            onClick={() => downloadICS(events, room.name)}
+            disabled={events.length === 0}
+          >
+            <span>Exportar calendario (.ics)</span>
+            <IconDownload />
+          </button>
           <button type="button" className="settings-row" onClick={() => applyPreset('light')}>
             <span>Restablecer</span>
             <IconRefresh />

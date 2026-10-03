@@ -18,6 +18,7 @@
 }
 
 .modal {
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -33,6 +34,27 @@
   animation: scaleModal var(--transition-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+.modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.modal-close:hover { background: var(--border); color: var(--text); }
+
 @keyframes scaleModal {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to   { opacity: 1; transform: scale(1)    translateY(0);   }
@@ -44,6 +66,9 @@
   letter-spacing: -0.02em;
   color: var(--text);
   margin-bottom: 0.1rem;
+  /* Deja sitio al botón de cerrar (arriba a la derecha) para que un título
+     largo (p. ej. el nombre de la sala) no se solape con él. */
+  padding-right: 2rem;
 }
 .modal label {
   font-size: 0.72rem;
@@ -58,6 +83,19 @@
 .modal textarea {
   min-height: 5.5rem;
   flex-shrink: 0;
+}
+
+/* Validación de campos: solo aparece tras un intento de guardar fallido (no
+   mientras el usuario todavía está rellenando el formulario por primera
+   vez) y desaparece sola en cuanto el dato deja de ser inválido. */
+.modal .input-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.12) !important;
+}
+.modal .field-error {
+  margin: -0.5rem 0 0;
+  font-size: 0.76rem;
+  color: var(--danger);
 }
 
 .modal-actions {
@@ -104,6 +142,14 @@
 
 .toggle-switch--on .toggle-switch-thumb { transform: translateX(19px); }
 
+/* Handle para arrastrar hacia abajo y cerrar (solo móvil — en escritorio el
+   modal no es una hoja inferior y basta con tocar fuera). touch-action: none
+   evita que el navegador interprete el arrastre como scroll/pull-to-refresh
+   antes de que el gesto llegue a useSwipeToDismiss. */
+.modal-drag-handle {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .modal-overlay { align-items: flex-end; padding: 0; backdrop-filter: blur(4px); }
   .modal {
@@ -114,6 +160,17 @@
   }
   .modal-actions { flex-wrap: wrap; }
   .modal-actions .btn-primary { flex: 1; text-align: center; }
+
+  .modal-drag-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border);
+    margin: -1.1rem auto 0.6rem;
+    flex-shrink: 0;
+    touch-action: none;
+  }
 }
 
 @keyframes slideUpModal {

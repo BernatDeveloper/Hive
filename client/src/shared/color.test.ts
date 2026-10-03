@@ -10,8 +10,8 @@ describe('isColorDark', () => {
     expect(isColorDark('#FFFFFF')).toBe(false)
   })
 
-  test('azul primario de la app (#0071E3) es oscuro (texto blanco encima)', () => {
-    expect(isColorDark('#0071E3')).toBe(true)
+  test('azul primario de la app (#3B82F6) es oscuro (texto blanco encima)', () => {
+    expect(isColorDark('#3B82F6')).toBe(true)
   })
 
   test('amarillo es claro', () => {

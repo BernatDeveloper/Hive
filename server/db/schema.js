@@ -20,8 +20,7 @@ export function createSchema() {
       primary_color TEXT,
       background_color TEXT,
       text_color TEXT,
-      sidebar_color TEXT,
-      event_colors TEXT
+      sidebar_color TEXT
     )
   `)
 

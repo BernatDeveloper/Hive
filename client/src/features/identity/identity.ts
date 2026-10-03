@@ -8,8 +8,37 @@ export interface Identity {
   color: string
 }
 
-// Paleta corta de colores de identidad — vivos y distinguibles entre sí.
-export const IDENTITY_COLORS = ['#0071e3', '#30d158', '#ff9f0a', '#bf5af2', '#ff375f', '#ff453a', '#64d2ff', '#ffd60a']
+// Paleta de colores de identidad — vivos y saturados (misma tónica que
+// antes, ahora con más variedad: 16 en vez de 8). Ordenada por matiz
+// (rueda de color) para que el selector se vea como una progresión de
+// colores, no una lista suelta.
+export const IDENTITY_COLORS = [
+  '#ff453a', '#ff6b4a', '#ff9f0a', '#ffd60a', '#a0d911', '#52c41a',
+  '#30d158', '#00c7be', '#64d2ff', '#0071e3', '#5e5ce6', '#7c4dff',
+  '#bf5af2', '#d6249f', '#eb2f96', '#ff375f',
+]
+
+// Nombres para el selector tipo "pop up" (un nombre hace más legible la
+// lista que un hex suelto) — solo de presentación, no se guarda en ningún
+// sitio ni se usa como identificador.
+export const IDENTITY_COLOR_NAMES: Record<string, string> = {
+  '#ff453a': 'Tomate',
+  '#ff6b4a': 'Coral',
+  '#ff9f0a': 'Mandarina',
+  '#ffd60a': 'Plátano',
+  '#a0d911': 'Lima',
+  '#52c41a': 'Hierba',
+  '#30d158': 'Eucalipto',
+  '#00c7be': 'Menta',
+  '#64d2ff': 'Pavo real',
+  '#0071e3': 'Cobalto',
+  '#5e5ce6': 'Índigo',
+  '#7c4dff': 'Violeta',
+  '#bf5af2': 'Lavanda',
+  '#d6249f': 'Magenta',
+  '#eb2f96': 'Fucsia',
+  '#ff375f': 'Flamenco',
+}
 
 const GLOBAL_KEY = 'identity'
 const roomKey = (room: string) => `identity:${room}`

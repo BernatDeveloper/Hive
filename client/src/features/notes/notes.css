@@ -64,8 +64,8 @@
   overflow: hidden;
 }
 .notes-sidebar-item:hover { background: var(--surface-2); }
-.notes-sidebar-item--active { background: rgba(0, 113, 227, 0.08); }
-.notes-sidebar-item--active:hover { background: rgba(0, 113, 227, 0.12); }
+.notes-sidebar-item--active { background: rgba(59, 130, 246, 0.08); }
+.notes-sidebar-item--active:hover { background: rgba(59, 130, 246, 0.12); }
 
 .notes-sidebar-item-btn {
   display: flex;

@@ -4,7 +4,7 @@ import { isColorDark } from '../../shared/color'
 import type { Room } from '../../types'
 
 const DEFAULTS = {
-  primary: '#0071E3',
+  primary: '#3B82F6',
   bg: '#F5F5F7',
   text: '#1D1D1F',
   surface: '#FFFFFF',
@@ -15,7 +15,6 @@ interface RoomColors {
   background_color: string | null
   text_color: string | null
   sidebar_color: string | null
-  event_colors: string[]
 }
 
 function pickColors(room: Room): RoomColors {
@@ -24,7 +23,6 @@ function pickColors(room: Room): RoomColors {
     background_color: room.background_color,
     text_color: room.text_color,
     sidebar_color: room.sidebar_color,
-    event_colors: room.event_colors ?? [],
   }
 }
 
@@ -77,5 +75,5 @@ export function useRoomStyle(room: Room, onUpdateRoom: (room: Room) => void) {
 
   const roomWithColors: Room = { ...room, ...colors }
 
-  return { colors, cssVars, roomWithColors, eventColors: colors.event_colors }
+  return { colors, cssVars, roomWithColors }
 }

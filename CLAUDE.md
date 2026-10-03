@@ -73,10 +73,10 @@ proyecto no está desplegado, así que no hay ALTER TABLE que mantener).
 | background_color | TEXT | hex, nullable |
 | text_color | TEXT | hex, nullable |
 | sidebar_color | TEXT | hex, nullable |
-| event_colors | TEXT | JSON array de hex (paleta de colores de evento); `[]` si null |
 
-- Fila opcional: si no existe, el cliente usa los colores por defecto y `event_colors: []`
+- Fila opcional: si no existe, el cliente usa los colores por defecto
 - Permite añadir más propiedades de estilo sin tocar la tabla `room`
+- No guarda paleta de colores de evento: esa paleta es fija y vive en el cliente (`EVENT_COLORS`, ver "Colores de evento"), no es configurable por sala
 
 ### Tabla `event`
 | column | type | notes |
@@ -160,15 +160,13 @@ sala al entrar/salir cualquier socket (`sockets/presence.js`).
 ### Payload `access-granted`
 ```typescript
 {
-  room: { name, created_at, timezone, primary_color, background_color, text_color, sidebar_color, event_colors: string[] },
+  room: { name, created_at, timezone, primary_color, background_color, text_color, sidebar_color },
   events: Event[],
   lists: List[],
   listItems: ListItem[],
   notes: Note[]
 }
 ```
-
-El payload `styles` de `update-room-style` puede incluir `event_colors: string[]` (la paleta); si se omite, el servidor conserva la guardada. Se sanea a hex `#rrggbb`, sin duplicados, tope 8.
 
 ## Eventos recurrentes
 
@@ -237,7 +235,7 @@ Nombre + color **por dispositivo**, guardados en `localStorage` (`client/src/fea
 
 - `localStorage['identity']`: identidad global `{ name, color }`. `localStorage['identity:<room>']`: override opcional solo para esa sala. `getIdentity(room?)` resuelve: override de esa sala → global → un invitado con color aleatorio de emergencia.
 - Alta única: `RoomEntry` intercala una pantalla (`IdentityForm`) antes del primer "Crear sala"/"Unirse a sala" si no hay identidad global aún (`hasIdentity()`); no vuelve a preguntar.
-- Editable en cualquier momento desde `RoomSettings` → "Tu identidad" (nombre + paleta de 8 colores + interruptor "Solo en esta sala", que decide si guarda como override de esa sala o como identidad global).
+- Editable en cualquier momento desde `RoomSettings` → "Tu identidad" (nombre + `ColorPickerPopover` sobre la paleta de 8 colores + interruptor "Solo en esta sala", que decide si guarda como override de esa sala o como identidad global).
 - Se adjunta como `editor_name`/`editor_color` en `join-room` (presencia) y en `create-event`/`update-event`/`create-note`/`update-note` (atribución) — ver más abajo. Servidor: nombre recortado a 40 caracteres, color validado como hex `#rrggbb`; cualquier valor ausente o con forma inválida cae a un valor por defecto (`'Invitado'` / un hex), nunca se rechaza el alta ni la escritura.
 
 ### Presencia con nombres
@@ -254,11 +252,18 @@ El re-join automático al reconectar (`client/src/socket/client.ts`, `socket.on(
 
 ## Colores de evento
 
-No hay categorías. Cada sala define su **paleta** de colores de evento en Ajustes (`RoomSettings` → "Colores de eventos", persistida en `room_style.event_colors`). Al crear/editar un evento se elige un color de esa paleta o "Por defecto" (`color: null` → hereda el `primary_color` de la sala). Se usa para:
-- Fondo del evento en FullCalendar (texto blanco/oscuro según contraste, `readableTextColor` en `client/src/shared/color.ts`) y punto en el panel de próximos eventos
-- Swatches de selección en `EventModal` ("Por defecto" + `room.event_colors`)
-- Chips de filtro por color en `EventsPanel` (ocultos si la paleta está vacía)
+No hay categorías ni paleta configurable por sala. Los colores de evento son una **paleta fija global**, igual en todas las salas: `EVENT_COLORS` en `client/src/features/calendar/eventColors.ts` (30 tonos — estilo pastel suave, dos intensidades (claro/medio) por cada una de 15 familias de color, ordenados por matiz; deliberadamente nada de rojo/verde/azul "de libro"). Al crear/editar un evento se elige uno de `EVENT_COLORS` o "Por defecto" (`color: null` → hereda el `primary_color` de la sala). Se usa para:
+- Fondo del evento en FullCalendar (texto blanco/oscuro según contraste, `readableTextColor` en `client/src/shared/color.ts`), en vista mes y en vista día por igual (`eventDisplay="block"` — por defecto FullCalendar solo pinta de color los eventos de día completo en vista mes)
+- Selector en `EventModal` vía `ColorPickerPopover` ("Por defecto" + `EVENT_COLORS`)
 - Constantes de recurrencia/recordatorio: `client/src/features/calendar/options.ts` (ex-`categories.ts`)
+
+No existe `room_style.event_colors` (eliminado): no hay nada que gestionar en Ajustes para esto — "Colores de eventos" ya no es una sección de `RoomSettings`.
+
+### Selector de color como desplegable (`ColorPickerPopover`)
+
+`client/src/shared/ColorPickerPopover.tsx` — botón disparador (anillo/"donut" + nombre del color actual) que abre una lista vertical (anillo + nombre + check en el seleccionado), estilo "elige un color" de Google Calendar/Keep. El anillo (`.color-popover-dot`) es un círculo con el centro hueco (borde grueso de color, fondo = superficie), no relleno. Genérico: recibe `options: { value: string | null; name: string }[]`. Mismo componente y misma semántica (selección única, check) en los dos sitios donde se elige un color:
+- `EventModal` — color del evento; opciones = `EVENT_COLORS` (paleta fija pastel, 30 colores con nombre) + "Por defecto"
+- `IdentityForm` y `RoomSettings` ("Tu identidad") — color de identidad; opciones = la paleta fija `IDENTITY_COLORS` (`client/src/features/identity/identity.ts`, 16 colores vivos/saturados — tónica distinta a `EVENT_COLORS` a propósito, no pastel), con nombres de presentación en `IDENTITY_COLOR_NAMES` (p. ej. `#0071e3` → "Cobalto") — solo de presentación, no se guardan ni se usan como identificador. Ambas paletas están ordenadas por matiz (rueda de color) para que el popup se vea como una progresión de colores
 
 ## Flujo de usuario
 
@@ -269,12 +274,11 @@ No hay categorías. Cada sala define su **paleta** de colores de evento en Ajust
    - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
 5. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
 6. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
-7. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo, **paleta de colores de evento** (guardados en `room_style`), **zona horaria de la sala** (gobierna los recordatorios, no el display) y **tu identidad** (nombre/color de dispositivo, global o solo para esta sala)
+7. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, preview en vivo, **zona horaria de la sala** (gobierna los recordatorios, no el display), **tu identidad** (nombre/color de dispositivo, global o solo para esta sala) y, al final, **exportar calendario (.ics)**, "Restablecer" y "Salir de la sala". Los colores de evento no se configuran aquí — son una paleta fija (ver "Colores de evento")
 8. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
 9. Presencia: el header del Dashboard muestra hasta 4 avatares (inicial + color de cada identidad conectada) si hay más de un dispositivo en la sala; un clic abre un desplegable con el nombre y color completos de cada persona
 10. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
-11. Calendario → botón ⬇ en el panel de "Próximos": descarga un `.ics` con todos los eventos (`features/calendar/ics.ts`, generado en cliente)
-12. Calendario, vistas **mes** y **día** (sin semana). Navegación estilo Google Calendar: en vista mes, un clic en cualquier parte de un día (hueco vacío o sobre un evento) cambia a la vista día de esa fecha; si ese día no tenía ningún evento, además abre de inmediato el modal de uno nuevo — si ya tenía, solo navega, y desde la vista día se toca el evento que se quiera editar. El enlace "+N más" de un día con muchos eventos lleva igual a su vista día (`moreLinkClick="day"`), en vez del popover propio de FullCalendar. En vista día, seleccionar un hueco de hora sigue abriendo el modal de nuevo evento como siempre.
+11. Calendario, vistas **mes** y **día** (sin semana), sin panel lateral. Crear un evento sin fecha concreta: botón flotante "+" (esquina inferior derecha). Exportar `.ics` con todos los eventos: fila "Exportar calendario (.ics)" en Ajustes de sala (no en el calendario — ver `features/calendar/ics.ts`, generado en cliente). Navegación estilo Google Calendar: en vista mes, un clic en cualquier parte de un día (hueco vacío o sobre un evento) cambia a la vista día de esa fecha; si ese día no tenía ningún evento, además abre de inmediato el modal de uno nuevo — si ya tenía, solo navega, y desde la vista día se toca el evento que se quiera editar. El enlace "+N más" de un día con muchos eventos lleva igual a su vista día (`moreLinkClick="day"`), en vez del popover propio de FullCalendar; en móvil ese enlace se abrevia a "···". En vista día, seleccionar un hueco de hora sigue abriendo el modal de nuevo evento como siempre. En móvil, deslizar el dedo horizontalmente sobre la rejilla cambia de mes/día (equivalente táctil de "<"/">"), con un pequeño "tirón" animado en la dirección del swipe (`.calendar-swiping-next/prev`, limpiado por `onAnimationEnd`) para que el cambio no se note instantáneo. Los días fuera del mes actual se muestran atenuados (opacidad), no ocultos; cada celda tiene un alto mínimo (`.fc-daygrid-day-frame`) para que la última fila (normalmente días del mes siguiente) no se comprima hasta perder el número, con scroll vertical de respaldo en `.calendar-main` si aun así no cupieran las 6 filas.
 12. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
 
 ## Estructura de componentes
@@ -286,8 +290,7 @@ SocketProvider           # context de estado de conexión
     ├── RoomEntry        # home/identity/create/join — auth con timeout de red (awaitAuthResponse); IdentityForm si no hay identidad de dispositivo aún
     └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con avatares de presencia)
         ├── RoomSettings # color modal con presets + preview + zona horaria (emits update-room-style, update-room-timezone, subscribe-push)
-        ├── Calendar     # calendar module — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente
-        │   ├── EventsPanel  # sidebar: próximos eventos agrupados por día, filtro por color
+        ├── Calendar     # calendar module (vistas mes/día, sin panel lateral) — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente
         │   └── EventModal   # create/edit/delete evento — color de la paleta, recurrencia, hora opcional
         ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props
         └── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props
@@ -307,7 +310,7 @@ El Dashboard calcula CSS custom properties inline a partir de los colores de la 
 --surface-2 → derivado: superficie secundaria (hover, inputs)
 --muted     → derivado: texto secundario
 ```
-Si una propiedad es null, el componente usa el valor por defecto (paleta clara tipo Apple: `#0071E3` / `#F5F5F7` / `#1D1D1F` / `#FFFFFF`). `RoomSettings` ofrece presets "Claro" y "Oscuro" que rellenan las 4 propiedades base de golpe.
+Si una propiedad es null, el componente usa el valor por defecto (paleta clara: `#3B82F6` / `#F5F5F7` / `#1D1D1F` / `#FFFFFF` — azul algo más pastel/claro que el original, elegido para quedar bien tanto en superficies claras como oscuras sin perder legibilidad del texto blanco de `.btn-primary`). `RoomSettings` ofrece presets "Claro" y "Oscuro" que rellenan las 4 propiedades base de golpe (el preset "Oscuro" usa su propio azul, `#0A84FF`, ya pensado para fondos oscuros).
 
 ## Tipos TypeScript (client)
 
@@ -333,7 +336,6 @@ interface Room {
   name: string; created_at?: string
   primary_color: string | null; background_color: string | null
   text_color: string | null; sidebar_color: string | null
-  event_colors: string[]   // paleta de la sala
   timezone: string   // zona IANA; gobierna los recordatorios, no el display
 }
 
@@ -372,11 +374,11 @@ interface Note {
 ```
 features/
   auth/         RoomEntry (intercala IdentityForm antes de create/join si hace falta), HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
-  identity/     identity.ts (Identity, getIdentity/get·setGlobalIdentity/get·setRoomOverride/clearRoomOverride — localStorage) + identity.test.ts (entorno jsdom vía `// @vitest-environment jsdom`), IdentityForm (alta única de nombre+color) + identity.css (swatches, reutilizado también por RoomSettings)
+  identity/     identity.ts (Identity, IDENTITY_COLORS, IDENTITY_COLOR_NAMES, getIdentity/get·setGlobalIdentity/get·setRoomOverride/clearRoomOverride — localStorage) + identity.test.ts (entorno jsdom vía `// @vitest-environment jsdom`), IdentityForm (alta única de nombre+color, color vía `ColorPickerPopover`)
   dashboard/    Dashboard (avatares de presencia en el header, con desplegable de nombres/colores al clic) + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
-  calendar/     Calendar (vistas mes/día con FullCalendar — dayGridPlugin + timeGridPlugin; navegación mes→día estilo Google Calendar vía dateClick/eventClick/moreLinkClick="day", ver "Flujo de usuario") + calendar.css (banner de conflicto de evento + atribución), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar), EventsPanel, options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros: addDaysToDateStr, isoToLocalDate/Time, buildEventDates, formatLocalDate, localDateKey — este último compartido con EventsPanel) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto) + ics.test.ts
+  calendar/     Calendar (vistas mes/día con FullCalendar — dayGridPlugin + timeGridPlugin; navegación mes→día estilo Google Calendar vía dateClick/eventClick/moreLinkClick="day", ver "Flujo de usuario"; sin panel lateral, botón flotante `.calendar-fab` para nuevo evento; swipe horizontal táctil = prev/next, vía onTouchStart/onTouchEnd) + calendar.css (banner de conflicto de evento + atribución; `.fc-day-today .fc-daygrid-day-number` dimensionado a propósito para ocupar el mismo alto que un número normal — si no, la fila con "hoy" sale más alta que el resto), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar; color vía `ColorPickerPopover` + `EVENT_COLORS`; validación visual solo tras un intento de guardar fallido — `.input-error`/`.field-error` en modal.css — para título vacío y hora de fin ≤ inicio, se desactiva sola en cuanto el dato deja de ser inválido; fechas vía `DateField`, wrapper local sobre `<input type="date"/"month">` que (a) oculta el icono nativo del navegador y superpone uno propio coloreado con `var(--text)` y (b) pinta el propio texto del input transparente y superpone el valor ya formateado `dd/mm/aaaa` — el formato del `<input type="date">` nativo lo decide el locale del navegador, no `lang` del HTML ni nada en CSS, igual que con `<input type="time">` y el porqué de TimeSelect; el `<input>` real sigue ahí intacto (valor, teclado, calendario nativo), solo cambia lo que se lee), eventColors.ts (paleta fija de colores de evento, ~30 tonos con nombre — ver "Colores de evento"), options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros: addDaysToDateStr, isoToLocalDate/Time, buildEventDates, formatLocalDate, localDateKey) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto, usado desde RoomSettings) + ics.test.ts
   lists/        Lists + lists.css, useLists
-  settings/     RoomSettings (colores + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad") + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
+  settings/     RoomSettings (colores de sala + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad" + exportar .ics, vía `../calendar/ics`; sin sección de colores de evento — paleta fija, no configurable) + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
   notes/        Notes (muestra "Editado por…" en la nota seleccionada) + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note, adjunta editor_name/editor_color vía getIdentity)
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom + re-join al reconectar (incluye editor_name/editor_color vía getIdentity, leída fresca en cada reconexión)
@@ -391,9 +393,14 @@ socket/
 pwa.ts          useServiceWorkerUpdate(): registra el SW, detecta versión en espera, apply() = skipWaiting + reload
 app.css         estilos del banner de actualización
 shared/
-  modal.css     estilos base del modal (usado por EventModal y RoomSettings)
-  color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar, EventModal) + color.test.ts
+  modal.css     estilos base del modal (usado por EventModal y RoomSettings; `.modal-close` = botón "×" arriba a la derecha, además de tocar fuera; en móvil es una hoja inferior con `.modal-drag-handle` — ver useSwipeToDismiss)
+  useSwipeToDismiss.ts   hook: arrastrar hacia abajo desde el handle del modal lo cierra (móvil); devuelve `style` (transform de arrastre) + `handleProps` (touch handlers) — usado por EventModal y RoomSettings, limitado al handle para no robarle el scroll al contenido
+  color.ts      isColorDark / readableTextColor (usado por useRoomStyle, Calendar) + color.test.ts
   relativeTime.ts   formatRelativeTime (ISO → "hace N min/horas/días"; usado por la atribución en EventModal y Notes) + relativeTime.test.ts
+  popover.css   CSS base compartida de los desplegables "popup" (disparador + lista vertical con check) — SelectPopover la usa tal cual; ColorPickerPopover le añade el anillo de color (`.popover-color-dot`)
+  usePopover.ts   hook de estado compartido por SelectPopover y ColorPickerPopover: abierto/cerrado, click fuera (comprueba tanto el disparador como la lista, portada aparte), Escape, y posición de la lista (`position: fixed`, recalculada en scroll/resize mientras está abierta). Ambos componentes renderizan su lista vía `createPortal` a `document.body` (`.popover-list` con `z-index: 1100`, por encima de `.modal-overlay`) en vez de como hijo normal con `position: absolute`, por dos motivos: (1) dentro de un modal con `overflow-y: auto`, un hijo `absolute` que se sale del modal cuenta igual como contenido desbordado y hace que el modal entero "crezca" (más scroll) para encajarlo; (2) `.modal-overlay` tiene `backdrop-filter`, que crea containing block para descendientes `fixed` — sin portal, el `fixed` quedaría posicionado respecto a ese overlay (con su padding) en vez del viewport, descuadrando las coordenadas. `usePopover` también calcula un `maxHeight` ajustado al espacio real disponible (y abre hacia arriba si no cabe hacia abajo), para que un disparador cerca del final del formulario (p. ej. el selector de hora) no deje opciones inalcanzables fuera de la pantalla. Acepta un `onClose` opcional (p. ej. SelectPopover lo usa para vaciar el buscador al cerrar). Como la lista vive en `<body>` (fuera de `.dashboard`, donde se fijan los colores de la sala como custom properties inline — ver useRoomStyle), `usePopover` lee con `getComputedStyle` el valor ya resuelto de cada token de color en el disparador (que sigue en su sitio real del árbol) y la lista los vuelve a declarar inline sobre sí misma — si no, el desplegable se veía siempre con los colores por defecto de `:root` (claros) sin importar el tema de la sala
+  SelectPopover.tsx   desplegable genérico de selección única como popup (sin color) — disparador con la opción actual, lista con check; genérico en el tipo del valor (sirve para string y para number | null); prop `searchable` añade un buscador arriba de la lista (listas largas, p. ej. zona horaria). Usado por: hora/minutos de evento (`TimeSelect` en EventModal, dos instancias De/A), recordatorio de evento (EventModal) y zona horaria de la sala (RoomSettings, con `searchable`) — sustituyen a los `<select>` nativos que tenían antes
+  ColorPickerPopover.tsx   selector de color en popup (anillo + nombre + check), construido sobre popover.css — ver "Selector de color como desplegable"; usado por EventModal, IdentityForm y RoomSettings ("Tu identidad")
 hooks/
   useIsMobile           breakpoint responsive (default 640px)
 push.ts         helpers de suscripción a Web Push (subscribeToPush, getCurrentSubscription)

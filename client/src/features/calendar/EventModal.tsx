@@ -2,8 +2,12 @@ import { useState } from 'react'
 import '../../shared/modal.css'
 import type { Event, RecurrenceRule, RecurrenceScope } from '../../types'
 import { RECURRENCE_LABELS, RECURRENCE_OPTIONS, REMINDER_OPTIONS } from './options'
-import { readableTextColor } from '../../shared/color'
 import { formatRelativeTime } from '../../shared/relativeTime'
+import ColorPickerPopover from '../../shared/ColorPickerPopover'
+import type { ColorOption } from '../../shared/ColorPickerPopover'
+import { EVENT_COLORS } from './eventColors'
+import { useSwipeToDismiss } from '../../shared/useSwipeToDismiss'
+import SelectPopover from '../../shared/SelectPopover'
 import {
   todayDateStr, addDaysToDateStr, isoToLocalDate, isoToLocalTime,
   dayOfWeekName, formatDateShort, buildEventDates,
@@ -18,8 +22,6 @@ interface Props {
   event?: Partial<Event>
   start?: string
   end?: string
-  paletteColors: string[]
-  primaryColor: string
   onSave: (event: EventSavePayload, scope?: RecurrenceScope) => void
   onDelete: (id: string, scope?: RecurrenceScope) => void
   onClose: () => void
@@ -36,29 +38,69 @@ const REC_ENTRIES = Object.entries(RECURRENCE_OPTIONS) as [RecurrenceRule, (type
 // Selector de hora en 24h propio: el <input type="time"> nativo muestra
 // AM/PM o 24h según el idioma/región del sistema operativo, algo que no se
 // puede forzar de forma fiable desde la web — así queda garantizado siempre.
-const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
-const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: String(i).padStart(2, '0'), label: String(i).padStart(2, '0') }))
+const MINUTES = Array.from({ length: 60 }, (_, i) => ({ value: String(i).padStart(2, '0'), label: String(i).padStart(2, '0') }))
 
 function TimeSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
   const [h, m] = value.split(':')
   return (
     <div className="time-select">
-      <select aria-label={`${label} — hora`} value={h} onChange={e => onChange(`${e.target.value}:${m}`)}>
-        {HOURS.map(hh => <option key={hh} value={hh}>{hh}</option>)}
-      </select>
+      <SelectPopover options={HOURS} value={h} onChange={v => onChange(`${v}:${m}`)} triggerLabel={`${label} — hora`} />
       <span className="time-select-colon">:</span>
-      <select aria-label={`${label} — minutos`} value={m} onChange={e => onChange(`${h}:${e.target.value}`)}>
-        {MINUTES.map(mm => <option key={mm} value={mm}>{mm}</option>)}
-      </select>
+      <SelectPopover options={MINUTES} value={m} onChange={v => onChange(`${h}:${v}`)} triggerLabel={`${label} — minutos`} />
     </div>
   )
 }
 
-export default function EventModal({ event, start, end, paletteColors, primaryColor, onSave, onDelete, onClose }: Props) {
+const IconCalendar = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="4" width="18" height="18" rx="2"/>
+    <line x1="16" y1="2" x2="16" y2="6"/>
+    <line x1="8" y1="2" x2="8" y2="6"/>
+    <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+)
+
+// El texto de <input type="date"/"month"> nativo lo formatea el navegador
+// según SU locale (a menudo inglés, mm/dd/aaaa) — ni `lang="es"` en el HTML
+// ni nada en CSS lo fuerza de forma fiable (mismo motivo por el que el
+// selector de hora es propio, no un <input type="time">). Se deja el valor
+// (ISO, YYYY-MM-DD/YYYY-MM) invisible pero intacto, y se superpone el texto
+// ya formateado en dd/mm/aaaa — el click sigue cayendo en el campo nativo
+// (abre su selector/calendario), solo cambia lo que se lee.
+function formatDateDisplay(type: 'date' | 'month', value: string): string {
+  const [y, m, d] = value.split('-')
+  if (!y || !m) return ''
+  return type === 'month' ? `${m}/${y}` : (d ? `${d}/${m}/${y}` : '')
+}
+
+// <input type="date"/"month"> nativo: el icono del calendario es un SVG fijo
+// del navegador que no se puede recolorear a un hex arbitrario. Se oculta
+// (opacidad 0, pero sigue ahí y es clicable) y se superpone un icono propio
+// coloreado con var(--text), alineado al mismo hueco (ver .date-field en
+// calendar.css, que fija tamaño/margen del indicador nativo para que
+// coincida exactamente con la posición del icono superpuesto).
+function DateField({ type, value, onChange }: { type: 'date' | 'month'; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="date-field">
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} />
+      <span className="date-field-value" aria-hidden="true">{formatDateDisplay(type, value)}</span>
+      <span className="date-field-icon"><IconCalendar /></span>
+    </div>
+  )
+}
+
+export default function EventModal({ event, start, end, onSave, onDelete, onClose }: Props) {
   const isEdit = !!event?.id
   const isSeries = !!event?.recurrence_id
+  const swipe = useSwipeToDismiss(onClose)
 
   const [title, setTitle] = useState(event?.title ?? '')
+  // Solo se activan al intentar guardar sin arreglar el problema — se
+  // desactivan solas en cuanto el dato deja de ser inválido (ver JSX), no
+  // hace falta limpiarlas a mano en cada onChange.
+  const [titleTouched, setTitleTouched] = useState(false)
+  const [timeTouched, setTimeTouched] = useState(false)
   const [description, setDescription] = useState(event?.description ?? '')
   const [color, setColor] = useState<string | null>(event?.color ?? null)
   const [recurrence, setRecurrence] = useState<RecurrenceRule>('none')
@@ -108,6 +150,7 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
   }
 
   function save() {
+    setTitleTouched(true)
     if (!title.trim()) return
     if (isSeries) {
       onSave({
@@ -124,6 +167,7 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
       return
     }
     if (!startDate) return
+    setTimeTouched(true)
     if (showTime && startTime >= endTime) return
 
     const { start: finalStart, end: finalEnd } = buildEventDates({ startDate, endDate, startTime, endTime, showTime, isRecurring })
@@ -148,10 +192,18 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
   }
 
   const hint = recurrenceHint()
+  const showTitleError = titleTouched && !title.trim()
+  const showTimeError = timeTouched && showTime && startTime >= endTime
+
+  // Paleta fija de colores de evento (igual para todas las salas, sin
+  // personalización) + "Por defecto" para heredar el primario de la sala.
+  const colorOptions: ColorOption[] = [{ value: null, name: 'Por defecto' }, ...EVENT_COLORS]
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" style={swipe.style} onClick={e => e.stopPropagation()}>
+        <div className="modal-drag-handle" {...swipe.handleProps} />
+        <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">×</button>
         <h3>{isEdit ? 'Editar evento' : 'Nuevo evento'}</h3>
 
         {isEdit && event?.last_editor_name && (
@@ -161,40 +213,24 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
           </p>
         )}
 
-        {/* Color swatches */}
-        <div className="event-colors">
-          <button
-            type="button"
-            className={`event-color-swatch${color === null ? ' event-color-swatch--on' : ''}`}
-            style={{ background: primaryColor, color: readableTextColor(primaryColor) }}
-            onClick={() => setColor(null)}
-            aria-label="Color por defecto"
-            aria-pressed={color === null}
-          >
-            {color === null && '✓'}
-          </button>
-          {paletteColors.map(c => (
-            <button
-              key={c}
-              type="button"
-              className={`event-color-swatch${color === c ? ' event-color-swatch--on' : ''}`}
-              style={{ background: c, color: readableTextColor(c) }}
-              onClick={() => setColor(c)}
-              aria-label={`Color ${c}`}
-              aria-pressed={color === c}
-            >
-              {color === c && '✓'}
-            </button>
-          ))}
-        </div>
+        {/* Color */}
+        <ColorPickerPopover
+          options={colorOptions}
+          value={color}
+          onChange={setColor}
+          triggerLabel="Elegir color del evento"
+        />
 
         {/* Title */}
         <input
           placeholder="Título *"
           value={title}
           onChange={e => setTitle(e.target.value)}
+          className={showTitleError ? 'input-error' : undefined}
+          aria-invalid={showTitleError}
           autoFocus
         />
+        {showTitleError && <p className="field-error">El título es obligatorio.</p>}
 
         {/* Date / recurrence section */}
         {isSeries ? (
@@ -259,10 +295,10 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
               isMonthBased ? (
                 <>
                   <label>Mes de inicio</label>
-                  <input
+                  <DateField
                     type="month"
                     value={startDate.slice(0, 7)}
-                    onChange={e => setStartDate(e.target.value + '-01')}
+                    onChange={v => setStartDate(v + '-01')}
                   />
                 </>
               ) : (
@@ -272,28 +308,16 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
                      recurrence === 'monthly' ? 'Día del mes' :
                                                 'Fecha de inicio'}
                   </label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
-                  />
+                  <DateField type="date" value={startDate} onChange={setStartDate} />
                 </>
               )
             ) : (
               /* Single event: start + end dates */
               <>
                 <label>Fecha inicio</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => setStartDate(e.target.value)}
-                />
+                <DateField type="date" value={startDate} onChange={setStartDate} />
                 <label>Fecha fin</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => setEndDate(e.target.value)}
-                />
+                <DateField type="date" value={endDate} onChange={setEndDate} />
               </>
             )}
 
@@ -307,16 +331,19 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
             </button>
 
             {showTime && (
-              <div className="recur-time-row">
-                <div className="recur-time-field">
-                  <label>De</label>
-                  <TimeSelect label="De" value={startTime} onChange={setStartTime} />
+              <>
+                <div className="recur-time-row">
+                  <div className="recur-time-field">
+                    <label>De</label>
+                    <TimeSelect label="De" value={startTime} onChange={setStartTime} />
+                  </div>
+                  <div className="recur-time-field">
+                    <label>A</label>
+                    <TimeSelect label="A" value={endTime} onChange={setEndTime} />
+                  </div>
                 </div>
-                <div className="recur-time-field">
-                  <label>A</label>
-                  <TimeSelect label="A" value={endTime} onChange={setEndTime} />
-                </div>
-              </div>
+                {showTimeError && <p className="field-error">La hora de fin debe ser posterior a la de inicio.</p>}
+              </>
             )}
 
             {/* Recurrence hint */}
@@ -326,16 +353,12 @@ export default function EventModal({ event, start, end, paletteColors, primaryCo
 
         {/* Reminder */}
         <label>Recordatorio</label>
-        <select
-          value={reminderOffset === null ? 'none' : String(reminderOffset)}
-          onChange={e => setReminderOffset(e.target.value === 'none' ? null : Number(e.target.value))}
-        >
-          {REMINDER_OPTIONS.map(opt => (
-            <option key={opt.label} value={opt.value === null ? 'none' : String(opt.value)}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <SelectPopover
+          options={REMINDER_OPTIONS}
+          value={reminderOffset}
+          onChange={setReminderOffset}
+          triggerLabel="Recordatorio"
+        />
 
         {/* Description */}
         <textarea

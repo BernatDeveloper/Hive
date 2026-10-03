@@ -47,7 +47,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const [showPeople, setShowPeople] = useState(false)
   const peopleRef = useRef<HTMLDivElement>(null)
 
-  const { colors, cssVars, roomWithColors, eventColors } = useRoomStyle(room, onUpdateRoom)
+  const { colors, cssVars, roomWithColors } = useRoomStyle(room, onUpdateRoom)
   const presence = usePresence()
   const cal = useEvents(room.name, initialEvents)
   const lists = useLists(room.name, initialLists, initialListItems)
@@ -139,9 +139,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         {activeModule === 'calendar' && (
           <Calendar
             events={cal.events}
-            roomName={room.name}
-            primaryColor={colors.primary_color ?? '#0071E3'}
-            paletteColors={eventColors}
+            primaryColor={colors.primary_color ?? '#3B82F6'}
             conflict={cal.conflict}
             onCreateEvent={cal.createEvent}
             onUpdateEvent={cal.updateEvent}
@@ -175,7 +173,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
       )}
 
       {showSettings && (
-        <RoomSettings room={roomWithColors} onClose={() => setShowSettings(false)} onLeave={leave} />
+        <RoomSettings room={roomWithColors} events={cal.events} onClose={() => setShowSettings(false)} onLeave={leave} />
       )}
     </div>
   )

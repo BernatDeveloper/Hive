@@ -6,17 +6,48 @@
   overflow: hidden;
 }
 
-.calendar-layout {
-  display: flex;
+.calendar-main {
+  position: relative;
   flex: 1;
   min-height: 0;
-}
-
-.calendar-main {
-  flex: 1;
   min-width: 0;
   padding: 1.25rem 1.5rem 0;
+  /* Red de respaldo: si las 6 filas fijas de la vista mes (con su alto
+     mínimo por celda, ver .fc-daygrid-day-frame) no caben en el alto
+     disponible, se puede hacer scroll en vez de que FullCalendar comprima
+     filas hasta el punto de recortar el número del día (la última fila,
+     normalmente del mes siguiente, era la más afectada). */
+  overflow-y: auto;
 }
+
+/* Alto mínimo por celda de la rejilla de mes — sin esto, cuando el alto
+   disponible es ajustado, FullCalendar puede comprimir alguna fila (sobre
+   todo la última, con días del mes siguiente) hasta recortar el número. */
+.fc .fc-daygrid-day-frame { min-height: 84px; }
+
+/* Botón flotante de nuevo evento — siempre visible en la esquina, sin
+   competir por espacio con la cabecera del calendario (antes "+ Nuevo" vivía
+   ahí). Posicionado respecto a .calendar-main, no al viewport, para no
+   taparse con el scroll interno de la vista día. */
+.calendar-fab {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  z-index: 10;
+}
+.calendar-fab:hover { transform: scale(1.06); box-shadow: var(--shadow-xl); }
 
 /* ── Aviso de conflicto (evento editado por otra persona) ── */
 .event-conflict-banner {
@@ -40,190 +71,6 @@
   .event-conflict-banner { margin: 0.75rem 1rem 0; }
 }
 
-/* ── Mobile view toggle ── */
-.calendar-view-toggle {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.calendar-view-toggle button {
-  flex: 1;
-  padding: 0.6rem;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.calendar-view-toggle button.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
-
-/* ── Events panel ── */
-.events-panel {
-  width: 250px;
-  min-width: 250px;
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.events-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.1rem 1rem 0.6rem;
-  flex-shrink: 0;
-}
-
-.events-panel-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.01em;
-}
-
-.events-panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.events-panel-new {
-  font-size: 0.72rem !important;
-  padding: 0.3rem 0.65rem !important;
-}
-
-.events-panel-export {
-  padding: 0.3rem 0.4rem !important;
-  color: var(--muted);
-}
-.events-panel-export:disabled { opacity: 0.4; cursor: default; }
-
-.events-panel-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  padding: 0 1rem 0.7rem;
-  flex-shrink: 0;
-}
-
-.events-filter-chip {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  border-radius: 100px;
-  padding: 0.22rem 0.55rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.events-filter-chip:hover { background: var(--surface-2); }
-
-.events-filter-chip--on {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-}
-
-/* Chip como swatch de color de la paleta */
-.events-filter-chip--swatch {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border-radius: 50%;
-}
-.events-filter-chip--swatch:hover { background: initial; transform: scale(1.1); }
-.events-filter-chip--swatch.events-filter-chip--on {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
-}
-
-.events-panel-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 0.5rem 1rem;
-}
-
-.events-panel-empty {
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.8rem;
-  padding: 2rem 1rem;
-}
-
-.events-panel-day { margin-bottom: 0.25rem; }
-
-.events-panel-day-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--muted);
-  padding: 0.55rem 0.5rem 0.2rem;
-}
-
-.events-panel-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.4rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-
-.events-panel-item:hover { background: var(--surface-2); }
-
-.events-panel-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 5px;
-}
-
-.events-panel-item-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
-}
-
-.events-panel-item-title {
-  font-size: 0.78rem;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.events-panel-item-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.68rem;
-  color: var(--muted);
-}
-
-.events-panel-recur { opacity: 0.7; font-size: 0.6rem; }
-
 /* ── EventModal: atribución ("Editado por…") ── */
 .event-attribution {
   margin: -0.5rem 0 0;
@@ -231,34 +78,6 @@
   color: var(--muted);
 }
 .event-attribution strong { color: var(--text); font-weight: 600; }
-
-/* ── EventModal: color swatches ── */
-.event-colors {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.event-color-swatch {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.event-color-swatch:hover { transform: scale(1.08); }
-
-.event-color-swatch--on {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary);
-}
 
 /* ── EventModal: recurrence grid ── */
 .recurrence-grid {
@@ -287,14 +106,14 @@
 .rec-opt:hover {
   background: var(--surface);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(0,113,227,0.10);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.10);
 }
 
 .rec-opt--on {
-  background: rgba(0,113,227,0.09);
+  background: rgba(59,130,246,0.09);
   border-color: var(--primary);
   color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(0,113,227,0.15);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
 }
 
 .rec-opt-label {
@@ -340,6 +159,55 @@
   margin: 0;
 }
 
+/* <input type="date"/"month">: el icono nativo es un SVG fijo del navegador
+   que no se puede recolorear a un hex arbitrario (ni con --text ni con
+   ningún color de la sala). Se oculta sin quitarlo del DOM (sigue ahí,
+   clicable, solo invisible) y se fijan su tamaño/margen a los mismos valores
+   que el icono propio superpuesto (.date-field-icon, en DateField), para que
+   ambos coincidan exactamente y el click siga abriendo el selector nativo. */
+.date-field {
+  position: relative;
+}
+/* El valor real sigue en el <input> (sin él no hay selector ni se puede
+   escribir/navegar con teclado) pero se pinta transparente — el texto
+   visible es el span .date-field-value, ya formateado dd/mm/aaaa. */
+.date-field input[type="date"],
+.date-field input[type="month"] {
+  color: transparent;
+}
+.date-field input[type="date"]::-webkit-calendar-picker-indicator,
+.date-field input[type="month"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.date-field-value {
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  color: var(--text);
+  font-size: 1rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.date-field-icon {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  width: 20px;
+  height: 20px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  pointer-events: none;
+}
+
 /* ── EventModal: selector de hora 24h (De / A) ── */
 .time-select {
   display: flex;
@@ -347,11 +215,19 @@
   gap: 0.3rem;
 }
 
-.time-select select {
+.time-select .popover {
   width: auto;
   min-width: 0;
   flex: 1;
-  padding: 0.75rem 0.4rem;
+}
+
+.time-select .popover-trigger {
+  padding: 0.75rem 0.5rem;
+  justify-content: center;
+}
+
+.time-select .popover-trigger-label {
+  flex: none;
   text-align: center;
 }
 
@@ -461,7 +337,7 @@
   background: var(--primary) !important;
   border-color: transparent !important;
   color: #fff !important;
-  box-shadow: 0 2px 8px rgba(0,113,227,0.3) !important;
+  box-shadow: 0 2px 8px rgba(59,130,246,0.3) !important;
 }
 .fc .fc-button-group { gap: 4px !important; }
 
@@ -482,47 +358,59 @@
 
 .fc .fc-daygrid-day { background: transparent !important; }
 .fc .fc-timegrid-slot { background: transparent !important; }
-.fc .fc-day-other { opacity: 0.3 !important; }
+/* Días fuera del mes: se siguen mostrando (con su número), solo atenuados,
+   para dar a entender que no forman parte del mes actual. */
+.fc .fc-day-other { opacity: 0.4 !important; }
 
-.fc .fc-day-today { background: rgba(0, 113, 227, 0.04) !important; }
-.fc .fc-highlight { background: rgba(0, 113, 227, 0.08) !important; }
+.fc .fc-day-today { background: rgba(59, 130, 246, 0.04) !important; }
+.fc .fc-highlight { background: rgba(59, 130, 246, 0.08) !important; }
+
+/* El número se centra horizontalmente en la celda (en vez de pegado a la
+   esquina) — mismo wrapper que usa FullCalendar para "hoy". */
+.fc .fc-daygrid-day-top {
+  display: flex !important;
+  justify-content: center !important;
+}
 
 .fc .fc-daygrid-day-number {
   font-size: 0.82rem !important;
   font-weight: 400 !important;
   color: var(--muted) !important;
   text-decoration: none !important;
-  padding: 5px 8px !important;
+  padding: 6px 10px !important;
   line-height: 1 !important;
 }
 .fc .fc-daygrid-day:not(.fc-day-other) .fc-daygrid-day-number {
   color: var(--text) !important;
 }
 
+/* El círculo de "hoy" se dimensiona para ocupar el mismo alto total que un
+   número normal (line-height 1 × font-size + padding 6px arriba/abajo ≈
+   25px) — si no, la fila que contiene "hoy" sale más alta que el resto. */
 .fc .fc-day-today .fc-daygrid-day-number {
   background: var(--primary) !important;
   color: #fff !important;
   border-radius: 50% !important;
-  width: 26px !important;
-  height: 26px !important;
+  width: 21px !important;
+  height: 21px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   padding: 0 !important;
-  margin: 4px !important;
+  margin: 2px !important;
   font-weight: 600 !important;
-  font-size: 0.8rem !important;
+  font-size: 0.72rem !important;
 }
 
 /* Event chips — color set via backgroundColor/textColor en cada evento */
 .fc .fc-daygrid-event-dot { display: none !important; }
 .fc .fc-h-event { border: none !important; }
 .fc .fc-event {
-  border-radius: 100px !important;
+  border-radius: var(--radius-sm) !important;
   border: none !important;
   font-size: 0.74rem !important;
   font-weight: 500 !important;
-  padding: 2px 8px !important;
+  padding: 1px 4px !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.18) !important;
   cursor: pointer !important;
   transition: opacity var(--transition-fast) !important;
@@ -531,7 +419,7 @@
 
 .fc .fc-timegrid-event {
   border-radius: var(--radius-sm) !important;
-  padding: 3px 6px !important;
+  padding: 2px 4px !important;
   box-shadow: var(--shadow-md) !important;
 }
 
@@ -552,14 +440,8 @@
 
 /* ── Mobile ── */
 @media (max-width: 640px) {
-  .events-panel {
-    width: 100%;
-    min-width: 0;
-    border-right: none;
-    flex: 1;
-  }
-
   .calendar-main { padding: 0.75rem 0.5rem 0; }
+  .fc .fc-daygrid-day-frame { min-height: 52px; }
 
   .fc .fc-toolbar { gap: 0.4rem !important; margin-bottom: 0.85rem !important; }
   .fc .fc-toolbar-title { font-size: 0.95rem !important; }
@@ -573,14 +455,35 @@
   }
   .fc .fc-daygrid-day-number {
     font-size: 0.72rem !important;
-    padding: 3px 5px !important;
+    padding: 4px 7px !important;
   }
   .fc .fc-day-today .fc-daygrid-day-number {
-    width: 22px !important;
-    height: 22px !important;
-    font-size: 0.7rem !important;
-    margin: 3px !important;
+    width: 17px !important;
+    height: 17px !important;
+    font-size: 0.62rem !important;
+    margin: 1px !important;
   }
-  .fc .fc-event { font-size: 0.63rem !important; padding: 1px 5px !important; }
+  .fc .fc-event { font-size: 0.63rem !important; padding: 1px 3px !important; }
   .fc .fc-timegrid-slot-label-cushion { font-size: 0.6rem !important; }
 }
+
+/* ── Animación de swipe (vista mes/día, solo táctil) ──
+   FullCalendar no tiene transición incorporada al llamar next()/prev(); el
+   contenido cambia al instante. Para dar sensación de desplazamiento sin
+   coreografiar un cross-fade real (entrada/salida sincronizada con el nuevo
+   contenido), se aplica un "nudge" direccional sobre la rejilla ya
+   actualizada: un leve tirón en el sentido del swipe que vuelve a su sitio. */
+@keyframes calendarSwipeNext {
+  0%   { transform: translateX(0); opacity: 1; }
+  35%  { transform: translateX(-18px); opacity: 0.45; }
+  36%  { transform: translateX(18px); }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes calendarSwipePrev {
+  0%   { transform: translateX(0); opacity: 1; }
+  35%  { transform: translateX(18px); opacity: 0.45; }
+  36%  { transform: translateX(-18px); }
+  100% { transform: translateX(0); opacity: 1; }
+}
+.calendar-main.calendar-swiping-next .fc { animation: calendarSwipeNext 0.26s ease; }
+.calendar-main.calendar-swiping-prev .fc { animation: calendarSwipePrev 0.26s ease; }

@@ -53,8 +53,8 @@
   overflow: hidden;
 }
 .lists-sidebar-item:hover { background: var(--surface-2); }
-.lists-sidebar-item--active { background: rgba(0, 113, 227, 0.08); }
-.lists-sidebar-item--active:hover { background: rgba(0, 113, 227, 0.12); }
+.lists-sidebar-item--active { background: rgba(59, 130, 246, 0.08); }
+.lists-sidebar-item--active:hover { background: rgba(59, 130, 246, 0.12); }
 
 .lists-sidebar-item-btn {
   display: flex;

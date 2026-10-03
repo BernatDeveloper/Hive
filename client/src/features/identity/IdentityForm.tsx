@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import '../auth/auth.css'
-import './identity.css'
-import { IDENTITY_COLORS, randomIdentityColor } from './identity'
+import ColorPickerPopover from '../../shared/ColorPickerPopover'
+import { IDENTITY_COLORS, IDENTITY_COLOR_NAMES, randomIdentityColor } from './identity'
 import type { Identity } from './identity'
+
+const IDENTITY_COLOR_OPTIONS = IDENTITY_COLORS.map(c => ({ value: c, name: IDENTITY_COLOR_NAMES[c] ?? c }))
 
 interface Props {
   onDone: (identity: Identity) => void
@@ -39,19 +41,12 @@ export default function IdentityForm({ onDone }: Props) {
               autoFocus
             />
           </label>
-          <div className="identity-colors">
-            {IDENTITY_COLORS.map(c => (
-              <button
-                key={c}
-                type="button"
-                className={`identity-color-swatch${color === c ? ' identity-color-swatch--on' : ''}`}
-                style={{ background: c }}
-                onClick={() => setColor(c)}
-                aria-label={`Color ${c}`}
-                aria-pressed={color === c}
-              />
-            ))}
-          </div>
+          <ColorPickerPopover
+            options={IDENTITY_COLOR_OPTIONS}
+            value={color}
+            onChange={c => setColor(c ?? randomIdentityColor())}
+            triggerLabel="Elegir tu color"
+          />
           <button type="submit" className="btn-primary">Continuar</button>
         </form>
       </div>

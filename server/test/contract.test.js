@@ -9,7 +9,7 @@ import { startTestServer, connect, once, emitAck } from './helpers.js'
 
 // Claves de cada tipo, tal como las declara client/src/types.ts
 const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at', 'last_editor_name', 'last_editor_color']
-const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors']
+const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'background_color', 'text_color', 'sidebar_color']
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
 const NOTE_KEYS = ['id', 'room', 'title', 'body', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
@@ -39,7 +39,6 @@ test('access-granted: claves del payload y del objeto room', async () => {
   const { granted } = await room('10.70.0.1')
   sameKeys(granted, ['room', 'events', 'lists', 'listItems', 'notes'], 'access-granted')
   sameKeys(granted.room, ROOM_KEYS, 'room')
-  assert.ok(Array.isArray(granted.room.event_colors))
 })
 
 test('event-created / event-updated: claves de Event', async () => {
@@ -78,9 +77,9 @@ test('note-created / note-updated ack: claves de Note', async () => {
 
 test('style-updated: claves de room', async () => {
   const { s, name } = await room('10.70.0.5')
-  s.emit('update-room-style', { name, styles: { primary_color: '#123456', background_color: null, text_color: null, sidebar_color: null, event_colors: ['#ff0000'] } })
+  s.emit('update-room-style', { name, styles: { primary_color: '#123456', background_color: null, text_color: null, sidebar_color: null } })
   const st = await once(s, 'style-updated')
-  sameKeys(st, ['name', 'primary_color', 'background_color', 'text_color', 'sidebar_color', 'event_colors'], 'style-updated')
+  sameKeys(st, ['name', 'primary_color', 'background_color', 'text_color', 'sidebar_color'], 'style-updated')
 })
 
 test('room-timezone-updated: claves', async () => {

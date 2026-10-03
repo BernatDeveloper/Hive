@@ -10,16 +10,19 @@ import esLocale from '@fullcalendar/core/locales/es'
 import type { Event, RecurrenceScope } from '../../types'
 import EventModal from './EventModal'
 import type { EventSavePayload } from './EventModal'
-import EventsPanel from './EventsPanel'
 import { readableTextColor } from '../../shared/color'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { formatLocalDate, localDateKey } from './dateUtils'
 
+const IconPlus = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+)
+
 interface Props {
   events: Event[]
-  roomName: string
   primaryColor?: string
-  paletteColors: string[]
   conflict: Event | null
   onCreateEvent: (data: Partial<Event>) => void
   onUpdateEvent: (data: EventSavePayload, scope?: RecurrenceScope) => void
@@ -34,11 +37,19 @@ interface ModalState {
   end?: string
 }
 
-export default function Calendar({ events, roomName, primaryColor = '#0071E3', paletteColors, conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict }: Props) {
+// Deslizar hacia la izquierda/derecha cambia de mes (vista mes) o de día
+// (vista día) — equivalente táctil de los botones "<"/">". Un gesto cuenta
+// como swipe horizontal solo si se mueve más en X que en Y y supera el
+// umbral; si no, se deja pasar tal cual (scroll vertical normal de la vista
+// día, o un toque/clic que ya gestiona FullCalendar).
+const SWIPE_THRESHOLD_PX = 50
+
+export default function Calendar({ events, primaryColor = '#3B82F6', conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
-  const [mobileView, setMobileView] = useState<'calendar' | 'events'>('calendar')
+  const [swipeDir, setSwipeDir] = useState<'next' | 'prev' | null>(null)
   const isMobile = useIsMobile()
   const calendarRef = useRef<FullCalendar>(null)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   function handleSelect(info: DateSelectArg) {
     setModal({ open: true, start: info.startStr, end: info.endStr })
@@ -51,7 +62,12 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
     calendarRef.current?.getApi().changeView('timeGridDay', dateStr)
     const hasEvents = events.some(e => localDateKey(e.start) === dateStr)
     if (!hasEvents) {
-      setModal({ open: true, start: dateStr, end: dateStr })
+      // Sin `end`: EventModal lo hace caer a `start` (mismo día, inclusivo).
+      // Pasar aquí `end: dateStr` sería el mismo día otra vez, pero
+      // EventModal interpreta cualquier `end` de día completo como
+      // EXCLUSIVO (igual que FullCalendar) y le resta un día — saldría el
+      // día anterior al pulsado.
+      setModal({ open: true, start: dateStr })
     }
   }
 
@@ -70,6 +86,29 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
     }
     const event = events.find(e => e.id === info.event.id)
     if (event) setModal({ open: true, event })
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    const start = touchStartRef.current
+    touchStartRef.current = null
+    if (!start) return
+    const t = e.changedTouches[0]
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    if (Math.abs(dx) <= Math.abs(dy) || Math.abs(dx) < SWIPE_THRESHOLD_PX) return
+    const api = calendarRef.current?.getApi()
+    if (dx < 0) {
+      api?.next()
+      setSwipeDir('next')
+    } else {
+      api?.prev()
+      setSwipeDir('prev')
+    }
   }
 
   // El modal ya se cerró (guardado optimista) cuando puede llegar el aviso de
@@ -124,68 +163,60 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
         </div>
       )}
 
-      {isMobile && (
-        <div className="calendar-view-toggle">
-          <button
-            className={mobileView === 'calendar' ? 'active' : ''}
-            onClick={() => setMobileView('calendar')}
-          >
-            Calendario
-          </button>
-          <button
-            className={mobileView === 'events' ? 'active' : ''}
-            onClick={() => setMobileView('events')}
-          >
-            Eventos
-          </button>
-        </div>
-      )}
+      <div
+        className={`calendar-main${swipeDir ? ` calendar-swiping-${swipeDir}` : ''}`}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onAnimationEnd={() => setSwipeDir(null)}
+      >
+        <FullCalendar
+          ref={calendarRef}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          // Seleccionable solo en vista día (crear arrastrando un hueco de
+          // hora); en vista mes un clic en el día navega en vez de
+          // seleccionar — ver handleDateClick/handleEventClick.
+          selectable={false}
+          views={{ timeGridDay: { selectable: true } }}
+          selectMirror
+          select={handleSelect}
+          dateClick={handleDateClick}
+          eventClick={handleEventClick}
+          // El enlace "+N más" de un día con muchos eventos lleva a su vista
+          // día, en vez de abrir el popover propio de FullCalendar — mismo
+          // patrón que cualquier otro clic sobre el día.
+          moreLinkClick="day"
+          // Por defecto, en vista mes FullCalendar pinta los eventos CON
+          // hora como "elemento de lista" (punto + texto, sin relleno) y
+          // solo los de día completo como bloque de color. Forzamos bloque
+          // siempre, para que el color se vea igual en mes y día.
+          eventDisplay="block"
+          // Si un día no tiene hueco para todos sus eventos, colapsa en un
+          // enlace: "+N más" en escritorio, "···" en móvil (sin número, para
+          // no competir por espacio en la celda).
+          dayMaxEventRows
+          moreLinkContent={isMobile ? () => '···' : undefined}
+          events={fcEvents}
+          locale="es"
+          locales={[esLocale]}
+          eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
+          height="100%"
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridDay',
+          }}
+          buttonText={{ today: 'Hoy' }}
+        />
 
-      <div className="calendar-layout">
-        {(!isMobile || mobileView === 'events') && (
-          <EventsPanel
-            events={events}
-            roomName={roomName}
-            primaryColor={primaryColor}
-            paletteColors={paletteColors}
-            onNewEvent={() => setModal({ open: true })}
-            onEventClick={ev => setModal({ open: true, event: ev })}
-          />
-        )}
-
-        {(!isMobile || mobileView === 'calendar') && (
-          <div className="calendar-main">
-            <FullCalendar
-              ref={calendarRef}
-              plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-              initialView="dayGridMonth"
-              // Seleccionable solo en vista día (crear arrastrando un hueco
-              // de hora); en vista mes un clic en el día navega en vez de
-              // seleccionar — ver handleDateClick/handleEventClick.
-              selectable={false}
-              views={{ timeGridDay: { selectable: true } }}
-              selectMirror
-              select={handleSelect}
-              dateClick={handleDateClick}
-              eventClick={handleEventClick}
-              // El enlace "+N más" de un día con muchos eventos lleva a su
-              // vista día, en vez de abrir el popover propio de FullCalendar
-              // — mismo patrón que cualquier otro clic sobre el día.
-              moreLinkClick="day"
-              events={fcEvents}
-              locale="es"
-              locales={[esLocale]}
-              eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
-              height="100%"
-              headerToolbar={{
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridDay',
-              }}
-              buttonText={{ today: 'Hoy' }}
-            />
-          </div>
-        )}
+        <button
+          type="button"
+          className="calendar-fab"
+          onClick={() => setModal({ open: true })}
+          aria-label="Nuevo evento"
+        >
+          <IconPlus />
+        </button>
       </div>
 
       {modal.open && (
@@ -193,8 +224,6 @@ export default function Calendar({ events, roomName, primaryColor = '#0071E3', p
           event={modal.event}
           start={modal.start}
           end={modal.end}
-          paletteColors={paletteColors}
-          primaryColor={primaryColor}
           onSave={save}
           onDelete={remove}
           onClose={() => setModal({ open: false })}
