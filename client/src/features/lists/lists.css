@@ -184,11 +184,36 @@
 }
 .lists-detail-title-input:focus { border: none; box-shadow: none; }
 
-.lists-detail-count {
+.lists-detail-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.78rem;
   color: var(--muted);
   font-weight: 400;
   flex-shrink: 0;
+}
+
+.lists-progress-ring circle:last-child {
+  transition: stroke-dashoffset var(--transition-normal);
+}
+
+/* Aviso breve al completar todos los ítems de la lista — se monta y
+   desmonta solo (ver celebrateListId en Lists.tsx), sin ocupar hueco fijo. */
+.lists-celebrate {
+  margin: 0.6rem 1.5rem 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--primary-rgb), 0.1);
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  animation: listsCelebratePop 0.35s ease;
+}
+@keyframes listsCelebratePop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .lists-detail-scroll {
@@ -232,6 +257,12 @@
 .lists-check--on {
   background: var(--primary);
   border-color: var(--primary);
+  animation: listsCheckPop 0.22s ease;
+}
+@keyframes listsCheckPop {
+  0%   { transform: scale(0.75); }
+  55%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
 
 .lists-item-text {
@@ -345,4 +376,5 @@
   .lists-section-header { padding: 0.5rem 1rem 0.25rem; }
   .lists-section-divider { margin: 0.5rem 1rem; }
   .lists-delete-btn, .lists-edit-btn { opacity: 1; }
+  .lists-celebrate { margin: 0.6rem 1rem 0; }
 }

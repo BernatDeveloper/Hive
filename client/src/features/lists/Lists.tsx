@@ -53,6 +53,24 @@ const IconListPlaceholder = () => (
   </svg>
 )
 
+// Anillo de progreso (relleno = completado). Un SVG simple en vez de texto
+// plano "N/M".
+function ProgressRing({ done, total, color }: { done: number; total: number; color: string }) {
+  const r = 8
+  const c = 2 * Math.PI * r
+  const pct = total > 0 ? done / total : 0
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" className="lists-progress-ring" aria-hidden="true">
+      <circle cx="10" cy="10" r={r} fill="none" stroke="var(--border)" strokeWidth="2.5" />
+      <circle
+        cx="10" cy="10" r={r} fill="none" stroke={color} strokeWidth="2.5"
+        strokeDasharray={c} strokeDashoffset={c * (1 - pct)}
+        strokeLinecap="round" transform="rotate(-90 10 10)"
+      />
+    </svg>
+  )
+}
+
 interface ItemRowProps {
   item: ListItem
   editing: boolean
@@ -67,7 +85,8 @@ interface ItemRowProps {
 
 // Fila de ítem: toque en el texto = marcar/desmarcar (como siempre); el lápiz
 // la cambia a modo edición (un <input> sustituye al <span>, sin botones al
-// lado — Enter/perder el foco guarda, Escape descarta).
+// lado — Enter/perder el foco guarda, Escape descarta). El check tiene un
+// pequeño "pop" al marcarse (ver .lists-check--on en lists.css).
 function ItemRow({ item, editing, editText, onStartEdit, onEditTextChange, onCommitEdit, onCancelEdit, onToggle, onDelete }: ItemRowProps) {
   return (
     <div className={`lists-item-row${item.checked ? ' lists-item-row--checked' : ''}`}>
@@ -121,6 +140,14 @@ export default function Lists({
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
   const [mobilePage, setMobilePage] = useState<'lists' | 'detail'>('lists')
+  // Para la celebración al completar: recuerda si cada lista estaba "ya
+  // completa" la última vez que se evaluó, de forma que solo se celebre la
+  // transición pendiente→completa (no al re-abrir una lista que ya estaba
+  // completa de antes). Se actualiza durante el render, no en un efecto —
+  // es el patrón que React recomienda para "ajustar estado derivado de
+  // props/estado que cambia" sin pasar por useEffect.
+  const [prevDone, setPrevDone] = useState<Record<string, boolean>>({})
+  const [celebrateListId, setCelebrateListId] = useState<string | null>(null)
   const newItemRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
 
@@ -131,6 +158,13 @@ export default function Lists({
       if (isMobile) setMobilePage('lists')
     }
   }, [lists, selectedId, isMobile])
+
+  // Auto-descarta el aviso de "completada" a los 2.2s.
+  useEffect(() => {
+    if (!celebrateListId) return
+    const t = setTimeout(() => setCelebrateListId(null), 2200)
+    return () => clearTimeout(t)
+  }, [celebrateListId])
 
   function handleCreateList(e: React.FormEvent) {
     e.preventDefault()
@@ -199,6 +233,16 @@ export default function Lists({
   const allSelected = listItems.filter(i => i.list_id === selectedId)
   const unchecked = allSelected.filter(i => !i.checked)
   const checked = allSelected.filter(i => i.checked)
+
+  // Detecta la transición pendiente→completa de la lista abierta (ver nota
+  // sobre `prevDone` arriba).
+  const isDone = !!selectedList && allSelected.length > 0 && unchecked.length === 0
+  if (selectedList && prevDone[selectedList.id] !== isDone) {
+    const id = selectedList.id
+    const wasPending = prevDone[id] === false
+    setPrevDone(prev => ({ ...prev, [id]: isDone }))
+    if (isDone && wasPending) setCelebrateListId(id)
+  }
 
   // ─── Sidebar ────────────────────────────────────────────
   const sidebar = (
@@ -282,7 +326,8 @@ export default function Lists({
               aria-label="Nombre de la lista"
             />
             {allSelected.length > 0 && (
-              <span className="lists-detail-count">
+              <span className="lists-detail-progress">
+                <ProgressRing done={checked.length} total={allSelected.length} color="var(--primary)" />
                 {checked.length}/{allSelected.length}
               </span>
             )}
@@ -294,6 +339,10 @@ export default function Lists({
               <IconTrash />
             </button>
           </div>
+
+          {celebrateListId === selectedList.id && (
+            <p className="lists-celebrate" role="status">🎉 ¡Lista completada!</p>
+          )}
 
           <div className="lists-detail-scroll">
             {allSelected.length === 0 && (
