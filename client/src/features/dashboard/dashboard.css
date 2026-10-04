@@ -6,9 +6,12 @@
   color: var(--text);
 }
 
+/* Tres columnas: nombre de sala · miembros · acciones. Las laterales son
+   iguales (minmax(0, 1fr)), así que la del medio queda en el centro real del
+   header sin depender de cuánto ocupe cada lado. */
 .dashboard-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   padding: 0 1.75rem;
   background: var(--surface);
@@ -23,11 +26,18 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  min-width: 0;
+}
+
+.dashboard-header-center {
+  display: flex;
+  justify-content: center;
 }
 
 .dashboard-header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -52,7 +62,9 @@
 .dashboard-presence-popover {
   position: absolute;
   top: calc(100% + 0.5rem);
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  transform-origin: top center;
   width: max-content;
   min-width: 230px;
   max-width: min(290px, calc(100vw - 2rem));
@@ -211,6 +223,10 @@
 .undo-toast-close:hover { opacity: 1; }
 
 .dashboard-room-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   font-size: 0.95rem;
   letter-spacing: -0.015em;

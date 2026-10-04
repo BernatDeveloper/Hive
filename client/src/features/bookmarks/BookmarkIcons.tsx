@@ -89,3 +89,39 @@ export const IconBookmarkPlaceholder = ({ size = 48 }: IconProps) => (
     <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
   </svg>
 )
+
+export const IconMore = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)} fill="currentColor" stroke="none">
+    <circle cx="12" cy="5" r="1.8"/>
+    <circle cx="12" cy="12" r="1.8"/>
+    <circle cx="12" cy="19" r="1.8"/>
+  </svg>
+)
+
+export const IconFilter = ({ size = 16 }: IconProps) => (
+  <svg {...base(size)}>
+    <line x1="4" y1="6" x2="20" y2="6"/>
+    <line x1="7" y1="12" x2="17" y2="12"/>
+    <line x1="10" y1="18" x2="14" y2="18"/>
+  </svg>
+)
+
+export const IconGrid = ({ size = 16 }: IconProps) => (
+  <svg {...base(size)}>
+    <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+    <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+    <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+    <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+  </svg>
+)
+
+export const IconList = ({ size = 16 }: IconProps) => (
+  <svg {...base(size)}>
+    <line x1="8" y1="6" x2="21" y2="6"/>
+    <line x1="8" y1="12" x2="21" y2="12"/>
+    <line x1="8" y1="18" x2="21" y2="18"/>
+    <circle cx="3.5" cy="6" r="1" fill="currentColor"/>
+    <circle cx="3.5" cy="12" r="1" fill="currentColor"/>
+    <circle cx="3.5" cy="18" r="1" fill="currentColor"/>
+  </svg>
+)

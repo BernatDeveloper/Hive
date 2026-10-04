@@ -25,6 +25,8 @@ const THEME_VARS = [
   '--surface', '--surface-2', '--border', '--text', '--muted', '--primary',
   '--radius-sm', '--radius-md', '--shadow-sm', '--shadow-md', '--shadow-lg',
   '--transition-fast',
+  // Los usan los paneles con chips/acciones (marcadores): rgba(var(--primary-rgb), …)
+  '--primary-rgb', '--primary-text', '--danger', '--success',
 ]
 
 // Estado + posicionamiento compartido por los desplegables tipo popup
@@ -57,7 +59,10 @@ const THEME_VARS = [
 // cuelgue, incluso fuera de una sala con tema (p. ej. IdentityForm, antes de
 // entrar a ninguna sala, donde simplemente no hay overrides que leer y se
 // resuelven los valores por defecto de `:root` igualmente).
-export function usePopover(onClose?: () => void) {
+// `minWidth`: ancho mínimo de la lista (por defecto 160px; la lista nunca es más
+// estrecha que el disparador). Un panel con más contenido que un botón, como
+// el de filtros de marcadores, pide más.
+export function usePopover(onClose?: () => void, minWidth = 160) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<PopoverPosition | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -69,11 +74,11 @@ export function usePopover(onClose?: () => void) {
   // por debajo del borde de la pantalla (ver "DE/A" en EventModal: con el
   // selector de hora cerca del final del formulario, un alto fijo de 320px
   // se salía del viewport y las últimas horas/minutos no se podían tocar).
-  function measure(): PopoverPosition | null {
+  const measure = useCallback((): PopoverPosition | null => {
     const el = wrapRef.current
     if (!el) return null
     const r = el.getBoundingClientRect()
-    const width = Math.max(r.width, 160)
+    const width = Math.min(Math.max(r.width, minWidth), window.innerWidth - VIEWPORT_MARGIN * 2)
     const left = Math.min(
       Math.max(VIEWPORT_MARGIN, r.left + r.width / 2 - width / 2),
       window.innerWidth - width - VIEWPORT_MARGIN
@@ -92,7 +97,7 @@ export function usePopover(onClose?: () => void) {
       return { left, width, vars, top: r.bottom + GAP, maxHeight: Math.max(MIN_USABLE_HEIGHT, Math.min(PREFERRED_MAX_HEIGHT, spaceBelow)) }
     }
     return { left, width, vars, bottom: window.innerHeight - r.top + GAP, maxHeight: Math.max(MIN_USABLE_HEIGHT, Math.min(PREFERRED_MAX_HEIGHT, spaceAbove)) }
-  }
+  }, [minWidth])
 
   function openPopover() {
     setPos(measure())
@@ -130,7 +135,7 @@ export function usePopover(onClose?: () => void) {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [open, closePopover])
+  }, [open, closePopover, measure])
 
   return { open, pos, wrapRef, listRef, toggle, closePopover }
 }

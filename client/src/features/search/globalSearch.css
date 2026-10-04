@@ -27,7 +27,10 @@
   background: transparent;
   box-shadow: none;
   font-size: 0.95rem;
-  padding: 0;
+  /* Con padding 0 el cursor (que se dibuja justo en el borde izquierdo) lo
+     recortaba el propio input: se veía a medias, pegado a la primera letra. */
+  padding: 0.3rem 0.2rem;
+  border-radius: 0;
   color: var(--text);
 }
 .global-search-input:focus { border: none; box-shadow: none; }

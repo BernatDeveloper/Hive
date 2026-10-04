@@ -52,6 +52,12 @@ export function domainHue(domain: string): number {
 
 export type BookmarkFilter = 'all' | 'favorites' | 'pending'
 
+export const FILTER_LABELS: Record<BookmarkFilter, string> = {
+  all: 'Todos',
+  favorites: 'Favoritos',
+  pending: 'Pendientes',
+}
+
 export interface BookmarkQuery {
   query: string
   filter: BookmarkFilter

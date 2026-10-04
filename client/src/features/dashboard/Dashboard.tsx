@@ -135,57 +135,62 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
           <span className="dashboard-room-name">{room.name}</span>
         </div>
 
-        <div className="dashboard-header-right">
-          {presence.length > 0 && (
-            <div className="dashboard-presence-wrap" ref={peopleRef}>
-              <button
-                type="button"
-                className="dashboard-presence"
-                onClick={() => setShowPeople(v => !v)}
-                aria-haspopup="dialog"
-                aria-expanded={showPeople}
-                aria-label={`Miembros de la sala: ${presence.length}, ${onlineCount} en línea`}
-              >
-                {presence.slice(0, MAX_AVATARS).map((p, i) => (
-                  <span
-                    key={i}
-                    className={`dashboard-presence-avatar${p.online ? ' is-online' : ' is-offline'}`}
-                    // El primero encima: así el punto verde (abajo a la
-                    // derecha) no lo tapa el avatar siguiente.
-                    style={{ background: p.color, color: readableTextColor(p.color), zIndex: MAX_AVATARS - i }}
-                  >
-                    {p.name.charAt(0)}
-                  </span>
-                ))}
-                {presence.length > MAX_AVATARS && (
-                  <span className="dashboard-presence-avatar dashboard-presence-more">+{presence.length - MAX_AVATARS}</span>
-                )}
-              </button>
-
-              {showPeople && (
-                <div className="dashboard-presence-popover" role="dialog" aria-label="Miembros de la sala">
-                  <p className="dashboard-presence-popover-title">
-                    Miembros · {presence.length}
-                    <span className="dashboard-presence-popover-online">{onlineCount} en línea</span>
-                  </p>
-                  {presence.map((p, i) => (
-                    <div key={i} className={`dashboard-presence-popover-item${p.online ? '' : ' is-offline'}`}>
-                      <span
-                        className={`dashboard-presence-avatar dashboard-presence-avatar--list${p.online ? ' is-online' : ''}`}
-                        style={{ background: p.color, color: readableTextColor(p.color) }}
-                      >
-                        {p.name.charAt(0)}
-                      </span>
-                      <span className="dashboard-presence-popover-name">{p.name}</span>
-                      <span className={`dashboard-presence-status${p.online ? ' is-online' : ''}`}>
-                        {p.online ? 'En línea' : p.last_seen_at ? `Visto ${formatRelativeTime(p.last_seen_at)}` : 'Desconectado'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+        {/* Centro del header: los miembros de la sala (columna propia de la rejilla,
+            así queda centrado de verdad aunque el nombre de la sala sea largo). */}
+        <div className="dashboard-header-center">
+        {presence.length > 0 && (
+          <div className="dashboard-presence-wrap" ref={peopleRef}>
+            <button
+              type="button"
+              className="dashboard-presence"
+              onClick={() => setShowPeople(v => !v)}
+              aria-haspopup="dialog"
+              aria-expanded={showPeople}
+              aria-label={`Miembros de la sala: ${presence.length}, ${onlineCount} en línea`}
+            >
+              {presence.slice(0, MAX_AVATARS).map((p, i) => (
+                <span
+                  key={i}
+                  className={`dashboard-presence-avatar${p.online ? ' is-online' : ' is-offline'}`}
+                  // El primero encima: así el punto verde (abajo a la
+                  // derecha) no lo tapa el avatar siguiente.
+                  style={{ background: p.color, color: readableTextColor(p.color), zIndex: MAX_AVATARS - i }}
+                >
+                  {p.name.charAt(0)}
+                </span>
+              ))}
+              {presence.length > MAX_AVATARS && (
+                <span className="dashboard-presence-avatar dashboard-presence-more">+{presence.length - MAX_AVATARS}</span>
               )}
-            </div>
-          )}
+            </button>
+
+            {showPeople && (
+              <div className="dashboard-presence-popover" role="dialog" aria-label="Miembros de la sala">
+                <p className="dashboard-presence-popover-title">
+                  Miembros · {presence.length}
+                  <span className="dashboard-presence-popover-online">{onlineCount} en línea</span>
+                </p>
+                {presence.map((p, i) => (
+                  <div key={i} className={`dashboard-presence-popover-item${p.online ? '' : ' is-offline'}`}>
+                    <span
+                      className={`dashboard-presence-avatar dashboard-presence-avatar--list${p.online ? ' is-online' : ''}`}
+                      style={{ background: p.color, color: readableTextColor(p.color) }}
+                    >
+                      {p.name.charAt(0)}
+                    </span>
+                    <span className="dashboard-presence-popover-name">{p.name}</span>
+                    <span className={`dashboard-presence-status${p.online ? ' is-online' : ''}`}>
+                      {p.online ? 'En línea' : p.last_seen_at ? `Visto ${formatRelativeTime(p.last_seen_at)}` : 'Desconectado'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        </div>
+
+        <div className="dashboard-header-right">
           <button className="btn-ghost btn-icon" onClick={() => setShowSearch(true)} aria-label="Buscar">
             <IconSearch />
           </button>

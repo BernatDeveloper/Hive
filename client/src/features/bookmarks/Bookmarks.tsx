@@ -6,12 +6,16 @@ import { readableTextColor } from '../../shared/color'
 import {
   collectTags, countFilters, domainHue, faviconUrl, filterBookmarks, findDuplicate, getDomain, normalizeUrl,
 } from './bookmarkUtils'
+import { FILTER_LABELS } from './bookmarkUtils'
 import type { BookmarkFilter } from './bookmarkUtils'
 import type { BookmarkPatch } from './useBookmarks'
+import { copyText } from './copyText'
 import BookmarkModal from './BookmarkModal'
+import BookmarkFilters from './BookmarkFilters'
+import BookmarkRow from './BookmarkRow'
 import {
-  IconBookmarkPlaceholder, IconCheck, IconCheckCircle, IconCopy, IconEdit, IconExternal, IconLink,
-  IconRefresh, IconSearch, IconStar, IconTrash, IconX,
+  IconBookmarkPlaceholder, IconCheck, IconCheckCircle, IconCopy, IconEdit, IconExternal, IconGrid, IconLink,
+  IconList, IconRefresh, IconSearch, IconStar, IconTrash, IconX,
 } from './BookmarkIcons'
 
 interface Props {
@@ -28,37 +32,15 @@ interface Props {
   onFocusHandled?: () => void
 }
 
-const FILTERS: { id: BookmarkFilter; label: string }[] = [
-  { id: 'all', label: 'Todos' },
-  { id: 'favorites', label: 'Favoritos' },
-  { id: 'pending', label: 'Pendientes' },
-]
+type ViewMode = 'grid' | 'list'
+const VIEW_KEY = 'bookmarksView'
+
+// La vista elegida (tarjetas / lista) se recuerda en el dispositivo.
+function readView(): ViewMode {
+  try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid' } catch { return 'grid' }
+}
 
 const HIGHLIGHT_MS = 1800
-
-// Copia al portapapeles. `navigator.clipboard` no existe fuera de un contexto
-// seguro (p. ej. probando desde el móvil por http://<ip-local>), así que cae a
-// un textarea temporal + execCommand.
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    try {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      const ok = document.execCommand('copy')
-      ta.remove()
-      return ok
-    } catch {
-      return false
-    }
-  }
-}
 
 interface CardProps {
   bookmark: Bookmark
@@ -255,6 +237,7 @@ export default function Bookmarks({
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
+  const [view, setView] = useState<ViewMode>(readView)
   // En escritorio scrollea la rejilla; en móvil, todo el contenedor (ver bookmarks.css).
   const rootRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -267,6 +250,11 @@ export default function Bookmarks({
   )
   const editing = bookmarks.find(b => b.id === editingId) ?? null
   const hasActiveFilters = query.trim() !== '' || filter !== 'all' || activeTag !== null
+
+  function changeView(next: ViewMode) {
+    setView(next)
+    try { localStorage.setItem(VIEW_KEY, next) } catch { /* localStorage no disponible */ }
+  }
 
   function resetFilters() {
     setQuery('')
@@ -363,21 +351,6 @@ export default function Bookmarks({
         {bookmarks.length > 0 && (
           <>
             <div className="bookmarks-controls">
-              <div className="bookmarks-filters" role="group" aria-label="Filtrar marcadores">
-                {FILTERS.map(f => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`bookmarks-chip${filter === f.id ? ' is-active' : ''}`}
-                    aria-pressed={filter === f.id}
-                    onClick={() => setFilter(f.id)}
-                  >
-                    {f.label}
-                    <span className="bookmarks-chip-count">{counts[f.id]}</span>
-                  </button>
-                ))}
-              </div>
-
               <div className="bookmarks-search">
                 <IconSearch size={15} />
                 <input
@@ -392,22 +365,52 @@ export default function Bookmarks({
                   </button>
                 )}
               </div>
+
+              <BookmarkFilters
+                filter={filter}
+                counts={counts}
+                tags={tags}
+                activeTag={activeTag}
+                onFilter={setFilter}
+                onTag={setActiveTag}
+              />
+
+              <div className="bookmarks-view-toggle" role="group" aria-label="Vista">
+                <button
+                  type="button"
+                  className={view === 'grid' ? 'is-active' : ''}
+                  aria-pressed={view === 'grid'}
+                  aria-label="Vista de tarjetas"
+                  title="Tarjetas"
+                  onClick={() => changeView('grid')}
+                >
+                  <IconGrid />
+                </button>
+                <button
+                  type="button"
+                  className={view === 'list' ? 'is-active' : ''}
+                  aria-pressed={view === 'list'}
+                  aria-label="Vista de lista"
+                  title="Lista"
+                  onClick={() => changeView('list')}
+                >
+                  <IconList />
+                </button>
+              </div>
             </div>
 
-            {tags.length > 0 && (
-              <div className="bookmarks-tagbar" role="group" aria-label="Filtrar por etiqueta">
-                {tags.map(({ tag, count }) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    className={`bookmarks-chip bookmarks-chip--tag${activeTag === tag ? ' is-active' : ''}`}
-                    aria-pressed={activeTag === tag}
-                    onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-                  >
-                    #{tag}
-                    <span className="bookmarks-chip-count">{count}</span>
+            {(filter !== 'all' || activeTag) && (
+              <div className="bookmarks-active" aria-label="Filtros activos">
+                {filter !== 'all' && (
+                  <button type="button" className="bookmarks-chip is-active" onClick={() => setFilter('all')} aria-label={`Quitar filtro ${FILTER_LABELS[filter]}`}>
+                    {FILTER_LABELS[filter]} <IconX size={11} />
                   </button>
-                ))}
+                )}
+                {activeTag && (
+                  <button type="button" className="bookmarks-chip is-active" onClick={() => setActiveTag(null)} aria-label={`Quitar etiqueta ${activeTag}`}>
+                    #{activeTag} <IconX size={11} />
+                  </button>
+                )}
               </div>
             )}
           </>
@@ -436,23 +439,40 @@ export default function Bookmarks({
               {hasActiveFilters ? `${visible.length} de ${bookmarks.length}` : bookmarks.length}{' '}
               {bookmarks.length === 1 ? 'marcador' : 'marcadores'}
             </p>
-            <div className="bookmarks-grid">
-              {visible.map((b, i) => (
-                <BookmarkCard
-                  key={b.id}
-                  bookmark={b}
-                  index={i}
-                  highlighted={highlightId === b.id}
-                  activeTag={activeTag}
-                  onToggleFavorite={() => onUpdate(b.id, { favorite: !b.favorite })}
-                  onToggleSeen={() => onUpdate(b.id, { seen: !b.seen })}
-                  onEdit={() => setEditingId(b.id)}
-                  onDelete={() => handleDelete(b)}
-                  onRefreshPreview={() => onRefreshPreview(b.id)}
-                  onTagClick={tag => setActiveTag(activeTag === tag ? null : tag)}
-                />
-              ))}
-            </div>
+            {view === 'grid' ? (
+              <div className="bookmarks-grid">
+                {visible.map((b, i) => (
+                  <BookmarkCard
+                    key={b.id}
+                    bookmark={b}
+                    index={i}
+                    highlighted={highlightId === b.id}
+                    activeTag={activeTag}
+                    onToggleFavorite={() => onUpdate(b.id, { favorite: !b.favorite })}
+                    onToggleSeen={() => onUpdate(b.id, { seen: !b.seen })}
+                    onEdit={() => setEditingId(b.id)}
+                    onDelete={() => handleDelete(b)}
+                    onRefreshPreview={() => onRefreshPreview(b.id)}
+                    onTagClick={tag => setActiveTag(activeTag === tag ? null : tag)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="bookmarks-list">
+                {visible.map(b => (
+                  <BookmarkRow
+                    key={b.id}
+                    bookmark={b}
+                    highlighted={highlightId === b.id}
+                    onToggleFavorite={() => onUpdate(b.id, { favorite: !b.favorite })}
+                    onToggleSeen={() => onUpdate(b.id, { seen: !b.seen })}
+                    onEdit={() => setEditingId(b.id)}
+                    onDelete={() => handleDelete(b)}
+                    onRefreshPreview={() => onRefreshPreview(b.id)}
+                  />
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
