@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Bookmark } from '../../types'
 import { formatRelativeTime } from '../../shared/relativeTime'
-import { domainHue, faviconUrl, getDomain } from './bookmarkUtils'
+import { activityText, bookmarkActivity, domainHue, faviconUrl, getDomain } from './bookmarkUtils'
 import { copyText } from './copyText'
 import BookmarkMenu from './BookmarkMenu'
 import { IconCheck, IconCheckCircle, IconStar } from './BookmarkIcons'
@@ -35,6 +35,7 @@ export default function BookmarkRow({
   const favicon = faviconUrl(b.url)
   const pending = b.preview_status === 'pending'
   const hue = domainHue(domain)
+  const activity = bookmarkActivity(b)
 
   async function handleCopy() {
     if (await copyText(b.url)) setCopied(true)
@@ -77,7 +78,12 @@ export default function BookmarkRow({
               {b.site_name || domain}
               {b.tags.length > 0 && <> · {b.tags.map(t => `#${t}`).join(' ')}</>}
               {b.preview_status === 'failed' && <> · sin vista previa</>}
-              <span className="bookmark-row-when"> · {formatRelativeTime(b.created_at)}</span>
+              {activity.kind === 'edited' ? (
+                // La edición (quién y cuándo) se ve siempre, también en móvil.
+                <span className="bookmark-row-edited"> · {activityText(activity)}</span>
+              ) : (
+                <span className="bookmark-row-when"> · {formatRelativeTime(activity.at)}</span>
+              )}
             </span>
           )}
         </span>

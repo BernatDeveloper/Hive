@@ -12,14 +12,15 @@ interface Props {
   activeTag: string | null
   onFilter: (f: BookmarkFilter) => void
   onTag: (tag: string | null) => void
+  onManageTags: () => void
 }
 
 // Botón "Filtros" + panel con el estado (Todos / Favoritos / Pendientes) y las
 // etiquetas. Antes iban siempre a la vista en tres filas de chips y, en
 // móvil, se comían casi media pantalla; ahora ocupan un botón, con un
 // contador de cuántos filtros hay activos.
-export default function BookmarkFilters({ filter, counts, tags, activeTag, onFilter, onTag }: Props) {
-  const { open, pos, wrapRef, listRef, toggle } = usePopover(undefined, 300)
+export default function BookmarkFilters({ filter, counts, tags, activeTag, onFilter, onTag, onManageTags }: Props) {
+  const { open, pos, wrapRef, listRef, toggle, closePopover } = usePopover(undefined, 300)
   const activeCount = (filter !== 'all' ? 1 : 0) + (activeTag ? 1 : 0)
 
   return (
@@ -69,7 +70,16 @@ export default function BookmarkFilters({ filter, counts, tags, activeTag, onFil
 
           {tags.length > 0 && (
             <>
-              <p className="bookmarks-filters-title">Etiquetas</p>
+              <div className="bookmarks-filters-title-row">
+                <p className="bookmarks-filters-title">Etiquetas</p>
+                <button
+                  type="button"
+                  className="bookmarks-filters-manage"
+                  onClick={() => { closePopover(); onManageTags() }}
+                >
+                  Gestionar
+                </button>
+              </div>
               <div className="bookmarks-filters-tags">
                 {tags.map(({ tag, count }) => (
                   <button

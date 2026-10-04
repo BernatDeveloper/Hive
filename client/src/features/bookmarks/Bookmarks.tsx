@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './bookmarks.css'
 import type { Bookmark } from '../../types'
-import { formatRelativeTime } from '../../shared/relativeTime'
 import { readableTextColor } from '../../shared/color'
 import {
-  collectTags, countFilters, domainHue, faviconUrl, filterBookmarks, findDuplicate, getDomain, normalizeUrl,
+  activityText, bookmarkActivity, cleanTag, collectTags, countFilters, domainHue, faviconUrl, filterBookmarks, findDuplicate, getDomain, normalizeUrl,
 } from './bookmarkUtils'
 import { FILTER_LABELS } from './bookmarkUtils'
 import type { BookmarkFilter } from './bookmarkUtils'
 import type { BookmarkPatch } from './useBookmarks'
 import { copyText } from './copyText'
 import BookmarkModal from './BookmarkModal'
+import TagsModal from './TagsModal'
 import BookmarkFilters from './BookmarkFilters'
 import BookmarkRow from './BookmarkRow'
 import {
@@ -26,6 +26,8 @@ interface Props {
   onUpdate: (id: string, patch: BookmarkPatch) => void
   onRefreshPreview: (id: string) => void
   onDelete: (id: string) => void
+  onRenameTag: (from: string, to: string) => void
+  onDeleteTag: (tag: string) => void
   // Abrir un marcador desde fuera (búsqueda global): limpia filtros, se
   // desplaza hasta la tarjeta y la resalta; `onFocusHandled` limpia el pedido.
   focusBookmarkId?: string | null
@@ -77,6 +79,7 @@ function BookmarkCard({
   const pending = b.preview_status === 'pending'
   const showImage = !!b.image && failedImage !== b.image
   const hue = domainHue(domain)
+  const activity = bookmarkActivity(b)
 
   async function handleCopy() {
     if (await copyText(b.url)) setCopied(true)
@@ -166,16 +169,16 @@ function BookmarkCard({
         )}
 
         <p className="bookmark-meta">
-          {b.added_by_name && (
+          {activity.name && (
             <span
               className="bookmark-meta-avatar"
-              style={b.added_by_color ? { background: b.added_by_color, color: readableTextColor(b.added_by_color) } : undefined}
+              style={activity.color ? { background: activity.color, color: readableTextColor(activity.color) } : undefined}
               aria-hidden="true"
             >
-              {b.added_by_name.charAt(0)}
+              {activity.name.charAt(0)}
             </span>
           )}
-          <span>{b.added_by_name ? `${b.added_by_name} · ` : ''}{formatRelativeTime(b.created_at)}</span>
+          <span>{activityText(activity)}</span>
         </p>
       </div>
 
@@ -228,7 +231,7 @@ function BookmarkCard({
 }
 
 export default function Bookmarks({
-  bookmarks, error, onClearError, onCreate, onUpdate, onRefreshPreview, onDelete, focusBookmarkId, onFocusHandled,
+  bookmarks, error, onClearError, onCreate, onUpdate, onRefreshPreview, onDelete, onRenameTag, onDeleteTag, focusBookmarkId, onFocusHandled,
 }: Props) {
   const [urlDraft, setUrlDraft] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
@@ -238,6 +241,8 @@ export default function Bookmarks({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [view, setView] = useState<ViewMode>(readView)
+  const [managingTags, setManagingTags] = useState(false)
+  const [lastRename, setLastRename] = useState<{ from: string; to: string } | null>(null)
   // En escritorio scrollea la rejilla; en móvil, todo el contenedor (ver bookmarks.css).
   const rootRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -256,6 +261,14 @@ export default function Bookmarks({
     try { localStorage.setItem(VIEW_KEY, next) } catch { /* localStorage no disponible */ }
   }
 
+  // Se recuerda el último renombrado: si afecta a la etiqueta que está
+  // filtrando, el filtro la sigue al nombre nuevo cuando llega el cambio del
+  // servidor (ver más abajo) en vez de soltarse al desaparecer el nombre viejo.
+  function renameTag(from: string, to: string) {
+    setLastRename({ from, to: cleanTag(to) })
+    onRenameTag(from, to)
+  }
+
   function resetFilters() {
     setQuery('')
     setFilter('all')
@@ -265,7 +278,10 @@ export default function Bookmarks({
   // Si la etiqueta activa deja de existir (se quitó de la última tarjeta que
   // la tenía), el filtro quedaría vacío sin forma de verlo: se suelta durante
   // el render (mismo patrón que Lists/Notes) en vez de en un efecto.
-  if (activeTag && !tags.some(t => t.tag === activeTag)) setActiveTag(null)
+  if (activeTag && !tags.some(t => t.tag === activeTag)) {
+    const followed = lastRename?.from === activeTag && tags.some(t => t.tag === lastRename.to)
+    setActiveTag(followed ? lastRename.to : null)
+  }
 
   // Abrir desde la búsqueda global (ver Props.focusBookmarkId).
   const [appliedFocusId, setAppliedFocusId] = useState<string | null>(null)
@@ -373,6 +389,7 @@ export default function Bookmarks({
                 activeTag={activeTag}
                 onFilter={setFilter}
                 onTag={setActiveTag}
+                onManageTags={() => setManagingTags(true)}
               />
 
               <div className="bookmarks-view-toggle" role="group" aria-label="Vista">
@@ -417,7 +434,7 @@ export default function Bookmarks({
         )}
       </div>
 
-      <div className="bookmarks-scroll" ref={scrollRef}>
+      <div className={`bookmarks-scroll${view === 'list' ? ' bookmarks-scroll--list' : ''}`} ref={scrollRef}>
         {bookmarks.length === 0 ? (
           <div className="bookmarks-empty">
             <span className="bookmarks-empty-icon"><IconBookmarkPlaceholder /></span>
@@ -476,6 +493,15 @@ export default function Bookmarks({
           </>
         )}
       </div>
+
+      {managingTags && (
+        <TagsModal
+          tags={tags}
+          onRename={renameTag}
+          onDelete={onDeleteTag}
+          onClose={() => setManagingTags(false)}
+        />
+      )}
 
       {editing && (
         <BookmarkModal

@@ -1,6 +1,7 @@
 // Lógica pura del módulo de marcadores (sin React ni red): normalizar URLs,
 // filtrar/buscar, etiquetas y el tono de relleno de las tarjetas sin imagen.
 import type { Bookmark } from '../../types'
+import { formatRelativeTime } from '../../shared/relativeTime'
 
 const MAX_URL = 2048
 
@@ -48,6 +49,28 @@ export function domainHue(domain: string): number {
   let h = 0
   for (let i = 0; i < domain.length; i++) h = (h * 31 + domain.charCodeAt(i)) >>> 0
   return h % 360
+}
+
+// Qué mostrar como "última actividad" de un marcador: si alguien lo editó, esa
+// edición (quién y cuándo); si no, quién lo guardó y cuándo.
+export interface BookmarkActivity {
+  kind: 'added' | 'edited'
+  name: string | null
+  color: string | null
+  at: string
+}
+
+export function bookmarkActivity(b: Bookmark): BookmarkActivity {
+  if (b.edited_at) return { kind: 'edited', name: b.last_editor_name, color: b.last_editor_color, at: b.edited_at }
+  return { kind: 'added', name: b.added_by_name, color: b.added_by_color, at: b.created_at }
+}
+
+// "Tester · hace 2 min" / "Editado por Tester · hace 2 min" (sin nombre:
+// "Editado · hace 2 min").
+export function activityText(a: BookmarkActivity, now?: number): string {
+  const when = formatRelativeTime(a.at, now)
+  if (a.kind === 'edited') return a.name ? `Editado por ${a.name} · ${when}` : `Editado · ${when}`
+  return a.name ? `${a.name} · ${when}` : when
 }
 
 export type BookmarkFilter = 'all' | 'favorites' | 'pending'

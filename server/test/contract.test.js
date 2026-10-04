@@ -10,10 +10,10 @@ import { startTestServer, connect, once, emitAck } from './helpers.js'
 // Claves de cada tipo, tal como las declara client/src/types.ts
 const EVENT_KEYS = ['id', 'room', 'title', 'start', 'end', 'description', 'color', 'recurrence_rule', 'recurrence_id', 'reminder_offset', 'reminder_sent', 'updated_at', 'last_editor_name', 'last_editor_color']
 const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'background_color', 'text_color', 'sidebar_color']
-const LIST_KEYS = ['id', 'room', 'title', 'created_at']
+const LIST_KEYS = ['id', 'room', 'title', 'created_at', 'last_editor_name', 'last_editor_color', 'edited_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
 const NOTE_KEYS = ['id', 'room', 'title', 'body', 'pinned', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
-const BOOKMARK_KEYS = ['id', 'room', 'url', 'title', 'description', 'image', 'site_name', 'tags', 'favorite', 'seen', 'preview_status', 'added_by_name', 'added_by_color', 'created_at', 'updated_at']
+const BOOKMARK_KEYS = ['id', 'room', 'url', 'title', 'description', 'image', 'site_name', 'tags', 'favorite', 'seen', 'preview_status', 'added_by_name', 'added_by_color', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color', 'edited_at']
 const PRESENCE_PERSON_KEYS = ['name', 'color', 'online', 'last_seen_at']
 
 const keysOf = o => Object.keys(o).sort()
@@ -165,6 +165,18 @@ test('bookmark-created / bookmark-updated / access-granted.bookmarks: claves de 
   s.emit('join-room', { name, password: 'test1234' })
   const granted = await once(s, 'access-granted')
   sameKeys(granted.bookmarks[0], BOOKMARK_KEYS, 'access-granted.bookmarks[0]')
+
+  // gestión de etiquetas: un solo evento con los marcadores afectados
+  const updP = once(s, 'bookmark-updated')
+  s.emit('update-bookmark', { room: name, id: created.id, tags: ['uno'] })
+  await updP
+  const batchP = once(s, 'bookmarks-updated')
+  s.emit('rename-bookmark-tag', { room: name, from: 'uno', to: 'dos' })
+  const batch = await batchP
+  assert.deepEqual(keysOf(batch), ['bookmarks'])
+  sameKeys(batch.bookmarks[0], BOOKMARK_KEYS, 'bookmarks-updated.bookmarks[0]')
+  const delAck = await emitAck(s, 'delete-bookmark-tag', { room: name, tag: 'dos' })
+  assert.deepEqual(keysOf(delAck), ['label', 'undoToken'])
 
   const ack = await emitAck(s, 'delete-bookmark', { room: name, id: created.id })
   assert.deepEqual(keysOf(ack), ['label', 'undoToken'])

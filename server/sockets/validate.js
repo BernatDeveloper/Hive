@@ -20,6 +20,7 @@ export const MAX = {
   bookmarkUrl: 2048,
   bookmarkTitle: 200,
   bookmarkDescription: 2000,
+  bookmarkTag: 60,   // antes de sanear (el saneado la recorta a 30)
   pushEndpoint: 1000,
   pushKey: 500,
   timezone: 60,

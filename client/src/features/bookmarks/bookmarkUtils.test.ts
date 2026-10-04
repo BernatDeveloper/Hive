@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'vitest'
 import {
   normalizeUrl, urlKey, findDuplicate, getDomain, faviconUrl, domainHue,
-  filterBookmarks, countFilters, collectTags, cleanTag,
+  filterBookmarks, countFilters, collectTags, cleanTag, bookmarkActivity, activityText,
 } from './bookmarkUtils'
 import type { Bookmark } from '../../types'
 
@@ -9,7 +9,7 @@ function bm(over: Partial<Bookmark>): Bookmark {
   return {
     id: 'b', room: 'r', url: 'https://ejemplo.com/a', title: 'Título', description: '', image: null, site_name: null,
     tags: [], favorite: false, seen: false, preview_status: 'done', added_by_name: null, added_by_color: null,
-    created_at: 't', updated_at: 't', ...over,
+    created_at: 't', updated_at: 't', last_editor_name: null, last_editor_color: null, edited_at: null, ...over,
   }
 }
 
@@ -103,6 +103,34 @@ describe('filterBookmarks', () => {
 
   test('countFilters', () => {
     expect(countFilters(list)).toEqual({ all: 3, favorites: 1, pending: 1 })
+  })
+})
+
+describe('actividad (quién y cuándo)', () => {
+  const NOW = Date.parse('2026-10-04T12:00:00Z')
+  const saved = bm({ added_by_name: 'Ana', added_by_color: '#ff0000', created_at: '2026-10-04T11:00:00Z' })
+
+  test('sin editar: quién lo guardó y cuándo', () => {
+    const a = bookmarkActivity(saved)
+    expect(a).toEqual({ kind: 'added', name: 'Ana', color: '#ff0000', at: '2026-10-04T11:00:00Z' })
+    expect(activityText(a, NOW)).toBe('Ana · hace 1 hora')
+  })
+
+  test('editado: quién lo editó y cuándo, en vez de quién lo guardó', () => {
+    const edited = { ...saved, last_editor_name: 'Beto', last_editor_color: '#00ff00', edited_at: '2026-10-04T11:55:00Z' }
+    const a = bookmarkActivity(edited)
+    expect(a).toEqual({ kind: 'edited', name: 'Beto', color: '#00ff00', at: '2026-10-04T11:55:00Z' })
+    expect(activityText(a, NOW)).toBe('Editado por Beto · hace 5 min')
+  })
+
+  test('editado sin nombre de editor: "Editado · hace N"', () => {
+    const edited = { ...saved, edited_at: '2026-10-04T11:55:00Z' }
+    expect(activityText(bookmarkActivity(edited), NOW)).toBe('Editado · hace 5 min')
+  })
+
+  test('guardado sin nombre: solo el tiempo', () => {
+    const anon = bm({ created_at: '2026-10-04T11:59:30Z' })
+    expect(activityText(bookmarkActivity(anon), NOW)).toBe('justo ahora')
   })
 })
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { socket, emitWrite, emitWriteAck } from '../../socket'
 import type { List, ListItem, UndoOffer } from '../../types'
+import { getIdentity } from '../identity/identity'
 
 // Estado del módulo de listas: listas y sus ítems. Refresca ambas colecciones
 // desde `access-granted` (reconexión).
@@ -48,17 +49,26 @@ export function useLists(room: string, initialLists: List[], initialItems: ListI
     }
   }, [])
 
+  // Cada acción que modifica la lista lleva la identidad de dispositivo
+  // (nombre/color): el servidor la guarda como "última modificación" de la
+  // lista y la difunde en `list-updated`. Se lee fresca en cada acción para no
+  // reenviar un nombre desactualizado si la persona se renombró.
+  const who = () => {
+    const identity = getIdentity(room)
+    return { editor_name: identity.name, editor_color: identity.color }
+  }
+
   return {
     lists,
     listItems,
-    createList: (title: string) => emitWrite('create-list', { room, title }),
-    updateListTitle: (id: string, title: string) => emitWrite('update-list', { room, id, title }),
+    createList: (title: string) => emitWrite('create-list', { room, title, ...who() }),
+    updateListTitle: (id: string, title: string) => emitWrite('update-list', { room, id, title, ...who() }),
     deleteList: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-list', { room, id }, {}),
-    createItem: (listId: string, text: string) => emitWrite('create-list-item', { room, listId, text }),
-    toggleItem: (id: string, checked: boolean) => emitWrite('toggle-list-item', { room, id, checked }),
-    updateItemText: (id: string, text: string) => emitWrite('update-list-item', { room, id, text }),
-    deleteItem: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-list-item', { room, id }, {}),
-    clearCompleted: (listId: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('clear-completed-items', { room, listId }, {}),
-    cloneList: (id: string) => emitWrite('clone-list', { room, id }),
+    createItem: (listId: string, text: string) => emitWrite('create-list-item', { room, listId, text, ...who() }),
+    toggleItem: (id: string, checked: boolean) => emitWrite('toggle-list-item', { room, id, checked, ...who() }),
+    updateItemText: (id: string, text: string) => emitWrite('update-list-item', { room, id, text, ...who() }),
+    deleteItem: (id: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('delete-list-item', { room, id, ...who() }, {}),
+    clearCompleted: (listId: string): Promise<UndoOffer> => emitWriteAck<UndoOffer>('clear-completed-items', { room, listId, ...who() }, {}),
+    cloneList: (id: string) => emitWrite('clone-list', { room, id, ...who() }),
   }
 }

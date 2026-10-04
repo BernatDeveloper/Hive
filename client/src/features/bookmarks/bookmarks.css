@@ -19,7 +19,6 @@
 .bookmarks-add {
   display: flex;
   gap: 0.5rem;
-  max-width: 720px;
 }
 
 .bookmarks-add-field {
@@ -143,10 +142,19 @@
   color: var(--muted);
 }
 
+/* Máx. 4 tarjetas a lo ancho: la rejilla se queda en una columna centrada de
+   1240px (con el mínimo de 260px por tarjeta caben 4 y no 5) en vez de seguir
+   añadiendo columnas en pantallas anchas. */
 .bookmarks-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
+  max-width: 1240px;
+  margin-inline: auto;
+}
+.bookmarks-scroll:not(.bookmarks-scroll--list) .bookmarks-count {
+  max-width: 1240px;
+  margin-inline: auto;
 }
 
 /* ─── Tarjeta ─── */
@@ -537,7 +545,6 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  max-width: 720px;
 }
 
 .bookmarks-filters-btn {
@@ -779,3 +786,75 @@
   .bookmark-row-main { padding-left: 0.75rem; }
   .bookmarks-list { border-radius: var(--radius-md); }
 }
+
+/* ─── Gestionar etiquetas ─── */
+.bookmarks-filters-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.bookmarks-filters-title-row .bookmarks-filters-title:not(:first-child) { margin-top: 0.7rem; }
+.bookmarks-filters-manage {
+  margin-top: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.bookmarks-filters-manage:hover { background: rgba(var(--primary-rgb), 0.1); }
+
+.tags-modal-hint { margin: -0.4rem 0 0; font-size: 0.8rem; color: var(--muted); }
+.tags-modal-empty { padding: 1.2rem 0; text-align: center; font-size: 0.86rem; color: var(--muted); }
+.tags-modal-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  max-height: min(50vh, 380px);
+  overflow-y: auto;
+  margin: 0 -0.3rem;
+  padding: 0;
+}
+.tags-modal-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 46px;
+  padding: 0.3rem 0.3rem;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+  animation: bookmarkErrorIn 0.2s ease;
+}
+.tags-modal-row:hover { background: var(--surface-2); }
+.tags-modal-tag { cursor: default; font-size: 0.82rem; padding: 0.15rem 0.6rem; }
+.tags-modal-count { flex: 1; font-size: 0.78rem; color: var(--muted); }
+.tags-modal-edit { flex: 1; min-width: 0; }
+.tags-modal-edit input { padding: 0.4rem 0.65rem; font-size: 0.88rem; }
+.tags-modal-merge { margin: 0.25rem 0 0; font-size: 0.74rem; color: var(--primary); }
+.bookmark-action.is-confirm { color: var(--success); }
+
+/* Textarea del modal de edición: tamaño fijo (sin el tirador de redimensionar);
+   si el texto no cabe, scrollea por dentro. */
+.bookmark-modal textarea {
+  resize: none;
+  height: 7.5rem;
+  min-height: 7.5rem;
+  overflow-y: auto;
+}
+
+/* ─── Escritorio: contenido centrado en una columna ───
+   La barra superior y la lista comparten el mismo ancho máximo y se centran;
+   la rejilla de tarjetas sigue ocupando todo el ancho. */
+.bookmarks-toolbar > * {
+  width: 100%;
+  max-width: 900px;
+  margin-inline: auto;
+}
+.bookmarks-scroll--list .bookmarks-count,
+.bookmarks-scroll--list .bookmarks-list {
+  max-width: 900px;
+  margin-inline: auto;
+}
+
+.bookmark-row-edited { color: var(--muted); }

@@ -1,18 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { db } from './connection.js'
 
-const HEX = /^#[0-9a-fA-F]{6}$/
-const MAX_EDITOR_NAME = 40
+import { sanitizeEditorName, sanitizeEditorColor } from './editor.js'
+
 const MAX_TAGS = 10
 const MAX_TAG_LENGTH = 30
-
-function sanitizeEditorName(name) {
-  return typeof name === 'string' && name.trim().length > 0 ? name.trim().slice(0, MAX_EDITOR_NAME) : null
-}
-
-function sanitizeEditorColor(color) {
-  return typeof color === 'string' && HEX.test(color) ? color.toLowerCase() : null
-}
 
 // Etiquetas: minúsculas, sin "#" inicial, espacios colapsados, sin duplicados,
 // máx. 10 de 30 caracteres. Cualquier otra cosa se descarta en silencio.
@@ -65,6 +57,9 @@ const toClient = row => ({
   added_by_color: row.added_by_color,
   created_at: row.created_at,
   updated_at: row.updated_at,
+  last_editor_name: row.last_editor_name ?? null,
+  last_editor_color: row.last_editor_color ?? null,
+  edited_at: row.edited_at ?? null,
 })
 
 const getRow = id => db.prepare('SELECT * FROM bookmark WHERE id = ?').get(id)
@@ -91,11 +86,24 @@ export function createBookmark(room, url, editorName, editorColor) {
 // Edición parcial (last-write-wins): solo toca los campos presentes en `patch`.
 // Título vacío → vuelve al provisional (dominio) en vez de dejar una tarjeta
 // sin título.
-export function updateBookmark(id, patch) {
+//
+// Atribución: si cambia el CONTENIDO (título, descripción o etiquetas) se
+// guarda quién lo editó y cuándo (`editor` = { name, color }, identidad de
+// dispositivo: informativa y spoofeable). Marcar favorito/visto no cuenta como
+// editar — si no, cada clic en la estrella taparía quién tocó el contenido de
+// verdad — y tampoco un "guardado" que deja todo igual.
+export function updateBookmark(id, patch, editor = {}) {
   const current = getRow(id)
   if (!current) return null
   const sets = []
   const values = []
+  const now = new Date().toISOString()
+  const nextTitle = typeof patch.title === 'string' ? (patch.title.trim() || placeholderTitle(current.url)) : current.title
+  const nextDescription = typeof patch.description === 'string' ? patch.description.trim() : current.description
+  const nextTags = patch.tags !== undefined ? JSON.stringify(sanitizeTags(patch.tags)) : JSON.stringify(parseTags(current.tags))
+  const contentChanged = nextTitle !== current.title
+    || nextDescription !== current.description
+    || nextTags !== JSON.stringify(parseTags(current.tags))
   if (typeof patch.title === 'string') {
     sets.push('title = ?')
     values.push(patch.title.trim() || placeholderTitle(current.url))
@@ -118,9 +126,72 @@ export function updateBookmark(id, patch) {
   }
   if (sets.length === 0) return toClient(current)
   sets.push('updated_at = ?')
-  values.push(new Date().toISOString())
+  values.push(now)
+  if (contentChanged) {
+    sets.push('last_editor_name = ?', 'last_editor_color = ?', 'edited_at = ?')
+    values.push(sanitizeEditorName(editor.name), sanitizeEditorColor(editor.color), now)
+  }
   db.prepare(`UPDATE bookmark SET ${sets.join(', ')} WHERE id = ?`).run(...values, id)
   return toClient(getRow(id))
+}
+
+// Aplica `transform(tags)` a las etiquetas de TODOS los marcadores de la sala
+// (devuelve el nuevo array, o null si ese marcador no cambia). Una sola
+// transacción. Devuelve los marcadores que cambiaron y sus etiquetas
+// anteriores (para poder deshacer).
+function changeTagsInRoom(room, transform, editor = {}) {
+  const changed = []
+  const previous = []
+  db.transaction(() => {
+    const rows = db.prepare('SELECT id, tags, last_editor_name, last_editor_color, edited_at FROM bookmark WHERE room = ?').all(room)
+    const update = db.prepare('UPDATE bookmark SET tags = ?, updated_at = ?, last_editor_name = ?, last_editor_color = ?, edited_at = ? WHERE id = ?')
+    const now = new Date().toISOString()
+    const editorName = sanitizeEditorName(editor.name)
+    const editorColor = sanitizeEditorColor(editor.color)
+    for (const row of rows) {
+      const before = parseTags(row.tags)
+      const after = transform(before)
+      if (!after || (after.length === before.length && after.every((t, i) => t === before[i]))) continue
+      update.run(JSON.stringify(after), now, editorName, editorColor, now, row.id)
+      // Lo anterior (etiquetas Y atribución) para poder deshacer.
+      previous.push({ id: row.id, tags: before, last_editor_name: row.last_editor_name, last_editor_color: row.last_editor_color, edited_at: row.edited_at })
+      changed.push(row.id)
+    }
+  })()
+  return { bookmarks: changed.map(id => toClient(getRow(id))), previous }
+}
+
+// Renombra una etiqueta en toda la sala. Si `to` ya existe en un marcador, se
+// unen (sin duplicar). Ambas se sanean igual que al guardar.
+export function renameTag(room, from, to, editor = {}) {
+  const f = sanitizeTags([from])[0]
+  const t = sanitizeTags([to])[0]
+  if (!f || !t || f === t) return { bookmarks: [], previous: [] }
+  return changeTagsInRoom(room, tags =>
+    tags.includes(f) ? [...new Set(tags.map(x => (x === f ? t : x)))] : null, editor)
+}
+
+// Quita una etiqueta de todos los marcadores de la sala. `tag` en el
+// resultado es la forma saneada (para el texto de "deshacer").
+export function deleteTag(room, tag, editor = {}) {
+  const t = sanitizeTags([tag])[0]
+  if (!t) return { bookmarks: [], previous: [], tag: null }
+  return { ...changeTagsInRoom(room, tags => (tags.includes(t) ? tags.filter(x => x !== t) : null), editor), tag: t }
+}
+
+// Deshacer: devuelve a cada marcador las etiquetas que tenía. Si alguno se
+// borró entretanto, se salta.
+export function restoreBookmarkTags(previous) {
+  const restored = []
+  db.transaction(() => {
+    const update = db.prepare('UPDATE bookmark SET tags = ?, updated_at = ?, last_editor_name = ?, last_editor_color = ?, edited_at = ? WHERE id = ?')
+    const now = new Date().toISOString()
+    for (const { id, tags, last_editor_name, last_editor_color, edited_at } of previous) {
+      const changes = update.run(JSON.stringify(sanitizeTags(tags)), now, last_editor_name ?? null, last_editor_color ?? null, edited_at ?? null, id).changes
+      if (changes > 0) restored.push(id)
+    }
+  })()
+  return restored.map(id => toClient(getRow(id)))
 }
 
 export function setPreviewPending(id) {
@@ -165,8 +236,8 @@ export function deleteBookmark(id) {
 
 export function restoreBookmark(row) {
   db.prepare(`
-    INSERT OR IGNORE INTO bookmark (id, room, url, title, description, image, site_name, tags, favorite, seen, preview_status, added_by_name, added_by_color, created_at, updated_at)
-    VALUES (@id, @room, @url, @title, @description, @image, @site_name, @tags, @favorite, @seen, @preview_status, @added_by_name, @added_by_color, @created_at, @updated_at)
+    INSERT OR IGNORE INTO bookmark (id, room, url, title, description, image, site_name, tags, favorite, seen, preview_status, added_by_name, added_by_color, created_at, updated_at, last_editor_name, last_editor_color, edited_at)
+    VALUES (@id, @room, @url, @title, @description, @image, @site_name, @tags, @favorite, @seen, @preview_status, @added_by_name, @added_by_color, @created_at, @updated_at, @last_editor_name, @last_editor_color, @edited_at)
   `).run({ ...row, preview_status: row.preview_status === 'pending' ? 'failed' : row.preview_status })
   return toClient(getRow(row.id))
 }

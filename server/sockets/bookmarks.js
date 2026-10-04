@@ -1,5 +1,6 @@
 import {
   createBookmark, updateBookmark, getBookmark, setPreviewPending, applyPreview, deleteBookmark,
+  renameTag, deleteTag,
 } from '../db/index.js'
 import { fetchLinkPreview, parseHttpUrl } from '../services/linkPreview.js'
 import { stash } from '../services/undo.js'
@@ -68,7 +69,7 @@ export function registerBookmarkHandlers(io, socket) {
 
   // Edición parcial (título, nota, etiquetas, favorito, visto): solo se tocan
   // los campos que vienen. Sin control de versión (last-write-wins).
-  safeAuthedOn(socket, 'update-bookmark', 'bookmark-error', { message: 'No se pudo actualizar el marcador' }, ({ room, id, ...fields }) => {
+  safeAuthedOn(socket, 'update-bookmark', 'bookmark-error', { message: 'No se pudo actualizar el marcador' }, ({ room, id, editor_name, editor_color, ...fields }) => {
     if (!str(id, MAX.id)) return
     const patch = {}
     if (typeof fields.title === 'string') patch.title = fields.title.slice(0, MAX.bookmarkTitle)
@@ -78,7 +79,7 @@ export function registerBookmarkHandlers(io, socket) {
     if (typeof fields.seen === 'boolean') patch.seen = fields.seen
     const current = getBookmark(id)
     if (!current || current.room !== room) return
-    const updated = updateBookmark(id, patch)
+    const updated = updateBookmark(id, patch, { name: editor_name, color: editor_color })
     if (updated) broadcast(io, room, 'bookmark-updated', updated)
   })
 
@@ -94,6 +95,28 @@ export function registerBookmarkHandlers(io, socket) {
     const pending = setPreviewPending(id)
     broadcast(io, room, 'bookmark-updated', pending)
     void loadPreview(io, room, pending)
+  })
+
+  // Gestión de etiquetas: renombrar / borrar una etiqueta en TODOS los
+  // marcadores de la sala. Un único `bookmarks-updated` con los afectados.
+  // Renombrar a una etiqueta que ya existe las une.
+  safeAuthedOn(socket, 'rename-bookmark-tag', 'bookmark-error', { message: 'No se pudo renombrar la etiqueta' }, ({ room, from, to, editor_name, editor_color }) => {
+    if (!str(from, MAX.bookmarkTag) || !str(to, MAX.bookmarkTag)) return
+    const { bookmarks } = renameTag(room, from, to, { name: editor_name, color: editor_color })
+    if (bookmarks.length > 0) broadcast(io, room, 'bookmarks-updated', { bookmarks })
+  })
+
+  // Borrar una etiqueta de todos los marcadores; con ack de deshacer (un solo
+  // token devuelve las etiquetas anteriores de cada marcador afectado).
+  safeAuthedOn(socket, 'delete-bookmark-tag', 'bookmark-error', { message: 'No se pudo borrar la etiqueta' }, ({ room, tag, editor_name, editor_color }, ack) => {
+    if (!str(tag, MAX.bookmarkTag)) return
+    const { bookmarks, previous, tag: cleaned } = deleteTag(room, tag, { name: editor_name, color: editor_color })
+    if (bookmarks.length === 0) return ack?.({})
+    broadcast(io, room, 'bookmarks-updated', { bookmarks })
+    ack?.({
+      undoToken: stash(room, { kind: 'bookmark-tags', previous }),
+      label: `Etiqueta «#${cleaned}»`,
+    })
   })
 
   safeAuthedOn(socket, 'delete-bookmark', 'bookmark-error', { message: 'No se pudo eliminar el marcador' }, ({ room, id }, ack) => {

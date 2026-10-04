@@ -252,6 +252,8 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             onUpdate={bookmarks.updateBookmark}
             onRefreshPreview={bookmarks.refreshPreview}
             onDelete={(id) => { bookmarks.deleteBookmark(id).then(undo.offer) }}
+            onRenameTag={bookmarks.renameTag}
+            onDeleteTag={(tag) => { bookmarks.deleteTag(tag).then(undo.offer) }}
             focusBookmarkId={bookmarksFocusId}
             onFocusHandled={() => setBookmarksFocusId(null)}
           />

@@ -179,6 +179,13 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  /* En pantallas anchas el contenido (cabecera, ítems y campo de nuevo ítem)
+     se queda en una columna centrada de este ancho en vez de estirarse. Las
+     barras (cabecera/pie) siguen a todo el ancho; solo su contenido se
+     centra. Los paddings usan max(): en pantallas estrechas se quedan en el
+     mínimo de siempre (1.5rem). */
+  --lists-col: 760px;
+  --lists-gutter: max(1.5rem, calc((100% - var(--lists-col)) / 2 + 1.5rem));
 }
 
 .lists-detail-header {
@@ -186,7 +193,7 @@
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0 1.5rem;
+  padding: 0 var(--lists-gutter);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
@@ -224,7 +231,9 @@
 /* Aviso breve al completar todos los ítems de la lista — se monta y
    desmonta solo (ver celebrateListId en Lists.tsx), sin ocupar hueco fijo. */
 .lists-celebrate {
-  margin: 0.6rem 1.5rem 0;
+  margin: 0.6rem auto 0;
+  width: calc(100% - 3rem);
+  max-width: calc(var(--lists-col) - 3rem);
   padding: 0.5rem 0.85rem;
   border-radius: var(--radius-sm);
   background: rgba(var(--primary-rgb), 0.1);
@@ -239,10 +248,13 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* El scroll sigue a todo el ancho (su barra queda en el borde de la pantalla);
+   el padding lateral deja los ítems en la columna central. Cada ítem conserva
+   su propio padding de 1.5rem, así su hover llena solo la columna. */
 .lists-detail-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem 0;
+  padding: 0.5rem max(0px, calc((100% - var(--lists-col)) / 2));
 }
 
 .lists-detail-empty {
@@ -355,7 +367,7 @@
   height: 60px;
   display: flex;
   align-items: center;
-  padding: 0 1.5rem;
+  padding: 0 var(--lists-gutter);
   gap: 0.5rem;
   border-top: 1px solid var(--border);
   background: var(--surface);
@@ -410,3 +422,31 @@
   .lists-delete-btn, .lists-edit-btn, .lists-clone-btn { opacity: 1; }
   .lists-celebrate { margin: 0.6rem 1rem 0; }
 }
+
+/* Última modificación (quién y cuándo), justo bajo la cabecera, alineada con
+   la columna de ítems. */
+.lists-detail-activity {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.5rem var(--lists-gutter) 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.lists-detail-activity > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lists-detail-activity-avatar {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.lists-detail-activity--empty { font-style: italic; opacity: 0.8; }

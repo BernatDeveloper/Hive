@@ -11,13 +11,14 @@ const note: Note = {
   id: 'n1', room: 'r', title: 'Ideas viaje', body: 'llevar pasaporte', pinned: false,
   created_at: 't', updated_at: 't', last_editor_name: null, last_editor_color: null,
 }
-const list: List = { id: 'l1', room: 'r', title: 'Compra', created_at: 't' }
+const list: List = { id: 'l1', room: 'r', title: 'Compra', created_at: 't', last_editor_name: null, last_editor_color: null, edited_at: null }
 const item: ListItem = { id: 'i1', list_id: 'l1', room: 'r', text: 'pasta de dientes', checked: false }
 
 const bookmark: Bookmark = {
   id: 'b1', room: 'r', url: 'https://www.tienda.com/zapatillas', title: 'Zapatillas de running', description: 'las mejores del año',
   image: null, site_name: null, tags: ['deporte'], favorite: false, seen: false, preview_status: 'done',
   added_by_name: null, added_by_color: null, created_at: 't', updated_at: 't',
+  last_editor_name: null, last_editor_color: null, edited_at: null,
 }
 
 const data = { events: [event], notes: [note], lists: [list], listItems: [item], bookmarks: [bookmark] }

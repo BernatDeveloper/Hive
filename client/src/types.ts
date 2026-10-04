@@ -54,6 +54,13 @@ export interface List {
   room: string
   title: string
   created_at: string
+  // Última modificación de la lista o de sus ítems (crearla, renombrarla,
+  // añadir/marcar/desmarcar/editar/borrar un ítem, vaciar completados):
+  // identidad de dispositivo, informativa y spoofeable. null en listas de
+  // antes de que existiera este registro.
+  last_editor_name: string | null
+  last_editor_color: string | null
+  edited_at: string | null
 }
 
 export interface ListItem {
@@ -84,6 +91,11 @@ export interface Bookmark {
   added_by_color: string | null
   created_at: string
   updated_at: string
+  // Última EDICIÓN de contenido (título, descripción, etiquetas) — no cuentan
+  // favorito/visto ni la vista previa. null = nunca editado.
+  last_editor_name: string | null
+  last_editor_color: string | null
+  edited_at: string | null
 }
 
 export interface Note {

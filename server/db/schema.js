@@ -50,6 +50,9 @@ export function createSchema() {
       title TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      last_editor_name TEXT,
+      last_editor_color TEXT,
+      edited_at TEXT,
       FOREIGN KEY (room) REFERENCES room(name) ON DELETE CASCADE
     )
   `)
@@ -102,7 +105,10 @@ export function createSchema() {
       added_by_name  TEXT,
       added_by_color TEXT,
       created_at     TEXT NOT NULL,
-      updated_at     TEXT NOT NULL
+      updated_at     TEXT NOT NULL,
+      last_editor_name  TEXT,
+      last_editor_color TEXT,
+      edited_at         TEXT
     )
   `)
 

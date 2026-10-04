@@ -2,17 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { db } from './connection.js'
 import { nextTimestamp } from '../lib/time.js'
 
-const HEX = /^#[0-9a-fA-F]{6}$/
-const MAX_EDITOR_NAME = 40
-
-// Identidad de quien crea/edita (Fase 9 — informativa, spoofeable).
-function sanitizeEditorName(name) {
-  return typeof name === 'string' && name.trim().length > 0 ? name.trim().slice(0, MAX_EDITOR_NAME) : null
-}
-
-function sanitizeEditorColor(color) {
-  return typeof color === 'string' && HEX.test(color) ? color.toLowerCase() : null
-}
+import { sanitizeEditorName, sanitizeEditorColor } from './editor.js'
 
 const toClientNote = row => ({ ...row, pinned: Boolean(row.pinned) })
 

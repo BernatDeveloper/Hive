@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import './lists.css'
 import type { List, ListItem } from '../../types'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { readableTextColor } from '../../shared/color'
+import { listActivityText } from './listActivity'
 
 interface Props {
   lists: List[]
@@ -391,6 +393,19 @@ export default function Lists({
               <IconTrash />
             </button>
           </div>
+
+          <p className={`lists-detail-activity${selectedList.edited_at ? '' : ' lists-detail-activity--empty'}`}>
+            {selectedList.edited_at && selectedList.last_editor_name && (
+              <span
+                className="lists-detail-activity-avatar"
+                style={selectedList.last_editor_color ? { background: selectedList.last_editor_color, color: readableTextColor(selectedList.last_editor_color) } : undefined}
+                aria-hidden="true"
+              >
+                {selectedList.last_editor_name.charAt(0)}
+              </span>
+            )}
+            <span>{listActivityText(selectedList)}</span>
+          </p>
 
           {celebrateListId === selectedList.id && (
             <p className="lists-celebrate" role="status">🎉 ¡Lista completada!</p>
