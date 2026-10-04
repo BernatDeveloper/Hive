@@ -90,6 +90,10 @@
   text-align: center;
 }
 
+.auth-legal-link { margin-top: 0.6rem; text-align: center; font-size: 0.76rem; }
+.auth-legal-link a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+.auth-legal-link a:hover { color: var(--primary); }
+
 .auth-form-header {
   display: flex;
   flex-direction: column;

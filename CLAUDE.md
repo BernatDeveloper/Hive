@@ -39,6 +39,8 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 ```
 (ejecutar dentro de `node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3`).
 
+**Para el servidor antes de `pnpm install`/`pnpm update`.** Mientras `node index.js` está en marcha, Windows bloquea `better_sqlite3.node`: pnpm no puede reemplazar ni borrar ese paquete (`ERR_PNPM_EPERM` / "Failed to remove …better-sqlite3…"), puede quedarse colgado y deja `node_modules` a medias (sin los enlaces de primer nivel, o el paquete sin sus ficheros salvo `build/`), y el servidor ya no arranca al reiniciarlo. Si pasa: para el servidor y vuelve a ejecutar `pnpm install`. Para actualizar sin tocar `node_modules` se puede usar `pnpm update <paquetes> --lockfile-only` y aplicar el `pnpm install` después, con el servidor parado. Actualiza **solo** lo necesario (`pnpm update <paquete>`): un `pnpm update` a secas sube todo dentro de su rango, incluido `better-sqlite3`, cuyo binario nativo nuevo es lo que más guerra da en Windows.
+
 ## Arquitectura general
 
 - Acceso por sala: nombre custom + contraseña obligatoria. Salas **nuevas**: mínimo 8 chars, validado en cliente (`CreateRoomForm` + indicador de fortaleza) y en servidor (`MIN_PASSWORD` en `sockets/validate.js`). `join-room` no re-valida longitud (salas antiguas con contraseñas cortas siguen funcionando)
@@ -47,7 +49,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 - Limpieza automática (`server/services/cleanup.js`, `startCleanupScheduler`, al arrancar y cada 24h): salas sin **ninguna** actividad (evento/ítem/nota/marcador) en más de **2 años** se eliminan; eventos cuyo `end` quedó hace más de **3 años** se borran fila a fila (nunca por `recurrence_id`, para no arrastrar instancias futuras de una serie con historial viejo)
 - Backup automático (`server/services/backup.js`, `startBackupScheduler`, al arrancar y cada 24h): `VACUUM INTO` a `backups/calendario-YYYY-MM-DD.db` (ruta configurable con `BACKUP_DIR`), conserva las últimas 14 copias
 - Apagado ordenado: `SIGTERM`/`SIGINT` cierran `io` (que cierra el HTTP server), hacen `wal_checkpoint(TRUNCATE)` y `db.close()` (`closeDb()` en `db/index.js`) antes de salir, con un timeout de guardia de 5s
-- CORS de Socket.io: en dev acepta cualquier puerto de `localhost`/`127.0.0.1` (`isOriginAllowed` en `server/config/cors.js`); en producción solo `ALLOWED_ORIGINS` (`CLIENT_ORIGIN`) y `*.vercel.app` — mantener `CLIENT_ORIGIN` en sync con la URL real del cliente
+- CORS de Socket.io (`server/config/cors.js`): fuera de producción acepta cualquier puerto de `localhost`/`127.0.0.1` **y de las IPs de red local** (192.168/16, 10/8, 172.16/12 — `isLocalDevHost`: así se prueba desde el móvil por `http://<ip-del-pc>:5173`); con `NODE_ENV=production` **solo** los orígenes de `CLIENT_ORIGIN`. `CLIENT_ORIGIN` admite varios separados por comas y se normaliza con `URL.origin` (una barra final o una ruta se ignoran; solo http/https). **Ya no se acepta cualquier `*.vercel.app`**: cualquiera puede publicar una página ahí que abriría conexiones a este servidor desde el navegador de un visitante; los dominios de Vercel (producción o previews) se listan explícitamente en `CLIENT_ORIGIN`. Si falta en producción, el servidor avisa en el log al arrancar. **CORS no protege las conexiones WebSocket** (el navegador no lo aplica a `ws://`): por eso `allowRequest` (`http/io.js`) comprueba también la cabecera `Origin` antes de crear la sesión y rechaza los orígenes no permitidos (sin cabecera `Origin` = cliente que no es un navegador: pasa, como con CORS). Un origen no permitido en HTTP simplemente no recibe cabeceras CORS (`corsOrigin` devuelve `false`, no un `Error`, que acababa en un 500 con traza en el log) Comprobador testeable: `createOriginChecker` / `parseOrigins` (`config/cors.test.js`)
 
 ## Base de datos (SQLite)
 
@@ -199,6 +201,7 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | `get-presence` | `—` | `presence` (`{ people: { name, color, online, last_seen_at }[] }`) al emisor |
 | `update-identity` | `{ name, identity: { name, color } }` | `presence` (room broadcast, mismo formato que `get-presence`). Refresca en vivo el nombre/color de este socket en la sala (MEJORAS-3) y, si entró con `device_id`, su fila de `room_member` — no toca `last_editor_*` de eventos/notas (esos son históricos a propósito) |
 | `subscribe-push` / `unsubscribe-push` | `{ room, subscription }` / `{ endpoint }` | `push-subscribed` / `push-unsubscribed` / `push-error` |
+| — | — | `rate-limited` (servidor → emisor, sin payload): se han descartado mensajes suyos por ir demasiado rápido (ver "Protección frente a abuso"); como mucho uno por segundo. Las cuotas y límites de acciones caras responden por el evento de error de su módulo (`event-error`, `list-error`, `note-error`, `bookmark-error`, `push-error`, `room-error`) con `{ message }` en español |
 
 Además, el servidor difunde `presence` (`{ people: { name, color, online, last_seen_at }[] }`
 — todos los miembros, conectados primero) a la sala al entrar/salir cualquier
@@ -266,6 +269,22 @@ Módulo para guardar enlaces (tutoriales, productos, artículos…). Al pegar un
 `fetchLinkPreview(url, { allowPrivate })`: `allowPrivate` existe **solo para los tests** (servidor local); ningún handler lo pasa. YouTube y similares llevan ~700 KB de script inline antes de los meta tags, de ahí el tope de 2 MB.
 
 **Privacidad:** la imagen (`og:image`) y el favicon (`<origen>/favicon.ico`) los carga directamente el navegador de cada miembro desde el sitio original (con `referrerPolicy="no-referrer"`), no pasan por el servidor — ese sitio ve la IP de quien abre el módulo. Aceptado a propósito para no convertir el servidor en un proxy de imágenes.
+
+## Protección frente a abuso
+
+Por capas. El límite de intentos de acceso solo frena que se adivinen contraseñas: **una vez dentro de una sala sigue haciendo falta protección** (quien tiene la contraseña, o un script con ella, podría inundar de escrituras o llenar el disco), y sin entrar en ninguna sala se pueden abrir conexiones o crear salas. Todos los valores viven en `server/config/limits.js` (`LIMITS`, objeto mutable a propósito: los tests lo bajan antes de arrancar el servidor). Nada de esto sustituye a la protección de la plataforma (DDoS volumétrico, TLS, WAF).
+
+1. **Al conectar** (`allowRequest` en `http/io.js`, antes de crear la sesión; engine.io lo llama en CADA petición, incluido el long-polling de sesiones abiertas, que llevan `sid` y no cuentan como conexión nueva): origen permitido (ver CORS), IP no baneada, máx. **40 sockets abiertos por IP** y **90 conexiones nuevas por minuto y por IP** (`lib/ipGuard.js`). `maxHttpBufferSize` = 600 KB (la nota más grande son 100.000 caracteres): un mensaje mayor cierra la conexión.
+2. **Por socket, antes de cualquier handler** (`sockets/guard.js`, `socket.use`): dos cubos de fichas (`lib/tokenBucket.js`) — uno para todo lo que llega, incluidos mensajes con nombres inventados (ráfaga 200, 30/s sostenido) y otro más estrecho para escrituras, es decir, todo menos `get-presence` (ráfaga 300, 10/s). Un mensaje descartado no llega al handler, el emisor recibe `rate-limited` y su IP suma una falta.
+3. **Baneo temporal**: 40 faltas en un minuto (mensajes descartados o intentos de acceso por encima del límite) banean la IP **10 minutos**: se cierran sus sockets y se rechazan sus conexiones. Ojo: socket.io entrega los mensajes aceptados al handler en el siguiente ciclo y los ignora si el socket se cerró entretanto, así que lo aceptado en la misma ráfaga que provoca el baneo se pierde (correcto para una IP abusiva).
+4. **Acciones caras**: `create-event` máx. 60/min por socket (cada uno puede ser una serie de 365 filas); `create-bookmark`/`refresh-bookmark` 30/min por socket (descargan una página ajena); `subscribe-push` 20/h por socket; crear salas **5 por hora y por IP** (un nombre ya cogido NO gasta cupo: se comprueba antes con `roomExists`) y un tope global de 10.000 salas.
+5. **Cuotas por sala** (`db/quotas.js` + `withinQuota` en `sockets/quota.js`): 20.000 eventos, 300 listas, 10.000 ítems, 1.000 notas, 5.000 marcadores, 100 dispositivos con avisos. Una serie o una clonación que no cabe se rechaza **entera** (no se crea a medias); volver a suscribir un dispositivo que ya está no gasta cupo.
+6. **Contraseñas**: `scrypt` corre en el pool de hilos de libuv, que comparte con el DNS de la vista previa de enlaces: máx. 2 a la vez y 50 en cola (`lib/concurrency.js`); con la cola llena, "El servidor está muy ocupado". **No se revela qué salas existen**: "no existe" y "contraseña incorrecta" dan el mismo mensaje (`BAD_CREDENTIALS`: "Sala o contraseña incorrectas") y, para que tampoco lo delate el tiempo de respuesta, con una sala inexistente se verifica contra un hash de relleno.
+7. **HTTP** (`http/security.js`; el servidor solo expone `GET /health`): sin `X-Powered-By`, cabeceras `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, CSP `default-src 'none'`, HSTS solo en producción y detrás de HTTPS; 120 peticiones/min por IP (429 con `Retry-After`); 404 y errores en JSON genérico, sin trazas (413 `payload-too-large` para cuerpos >256 KB).
+8. **IP fiable o no** (`http/ip.js`): si llega `X-Forwarded-For` y `TRUST_PROXY` no está activo, la IP es la del proxy — los límites y baneos **por IP** se desactivan (si no, un usuario castigaría a todos; el log lo avisa una vez). El límite de intentos de acceso sí sigue (y afectaría a toda la app): de ahí que `TRUST_PROXY` sea obligatorio detrás de un proxy.
+9. **Cliente (alojamiento estático)**: `client/vercel.json` añade CSP (`script-src 'self'`; `style-src 'unsafe-inline'` porque FullCalendar y React escriben estilos en línea; `font-src 'self' data:` porque FullCalendar incrusta su fuente de iconos como `data:` — sin eso se rompían los botones `<`/`>`, detectado probando la build bajo la CSP; `img-src https: data:` por las imágenes de los marcadores; `connect-src 'self' https: wss:`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, HSTS y caché inmutable para `/assets/`.
+
+Conocido y aceptado: un `access-denied` por límite de intentos o por "servidor ocupado" en el re-join automático hace que el cliente olvide la sala recordada (el cliente no distingue el motivo del rechazo).
 
 ## Concurrencia optimista (eventos y notas)
 
@@ -360,6 +379,7 @@ No existe `room_style.event_colors` (eliminado): no hay nada que gestionar en Aj
     - `Dashboard` muestra `ShareLinkDialog`: **pide confirmar** (dominio, título de la página si lo mandó la app, URL) en vez de guardar a ciegas — así un enlace manipulado (`/?url=…`) no añade marcadores sin que se vea. "Guardar" → `createBookmark`, abre el módulo Marcadores (la tarjeta entra arriba con su vista previa cargando). Si el enlace **ya estaba guardado** (`findDuplicate`) no se duplica: dice "Ya lo tienes guardado" y "Ver marcador" abre el módulo y resalta la tarjeta existente.
     - `extractUrl`/`parseShareParams`: muchas apps (Chrome Android incluido) ponen el enlace dentro de `text` —a veces con más palabras— y dejan `url` vacío, así que se prueban `url`, `text` y `title` por ese orden; se recorta la puntuación que pega la frase ("…post.") pero se conservan los paréntesis que son de la URL (Wikipedia `Foo_(bar)`); solo http(s) (`normalizeUrl` rechaza `javascript:`, `file:` y credenciales); un título que es la propia URL se ignora. Una carga normal de la app (sin esos parámetros) o con parámetros ajenos no hace nada.
     - **Limitaciones de la plataforma:** solo **Android** (Chrome/Edge/Samsung Internet) con la PWA **instalada** y HTTPS; iOS Safari no soporta Web Share Target. Al desplegar este cambio, una PWA ya instalada no ve el destino nuevo hasta que el navegador actualiza su manifest (puede tardar un día) o se reinstala. Probado simulando la URL que abre el sistema; la hoja de compartir real del móvil solo se puede comprobar en un dispositivo.
+16. Páginas fuera de la app: **`/privacidad`** (política de privacidad) y **404**. No hay librería de rutas: `src/routes.ts` (`resolveRoute`) decide UNA vez al arrancar en `main.tsx`, que solo importa la app (de forma dinámica) en `/` — la app crea el socket y se conecta al importarse, y estas páginas no deben abrir conexión ni intentar entrar en una sala. Se enlazan con navegación normal (pestaña nueva desde la pantalla de inicio y desde Ajustes de sala), no con `pushState`, así que el estado de la app no se mezcla con ellas. En Vercel, `vercel.json` reescribe `/privacidad` a `index.html`, y cualquier otra ruta o fichero inexistente lo sirve `public/404.html` (autocontenido, con **estado 404 real**); donde el alojamiento sirve la app para cualquier ruta (desarrollo, preview), la propia app muestra `NotFoundPage` (con `noindex`). El texto de la política describe lo que la app hace de verdad (datos, `localStorage`, vista previa de enlaces, retención, copias de seguridad): **si cambia lo que se recoge o cómo, hay que actualizarlo** y su fecha (`LAST_UPDATED` en `PrivacyPage.tsx`). El correo de contacto es `faenabernat@gmail.com` (`DEFAULT_CONTACT` en `PrivacyPage.tsx`), sobrescribible al construir con `VITE_PRIVACY_CONTACT`.
 
 ## Estructura de componentes
 
@@ -493,6 +513,9 @@ socket/
   ConnectionBanner.tsx  barra fija "Sin conexión…" tras 3s de gracia (+ "N cambios sin sincronizar" si hay cola), montada en App
   authFlow.ts           awaitAuthResponse(): listeners `once` + timeout de red (8s) + connect_error, con cleanup único
   connection-context.ts / connection-banner.css / index.ts (barrel)
+main.tsx        decide la página con resolveRoute: app (import dinámico de App + socket), PrivacyPage o NotFoundPage
+routes.ts       resolveRoute(pathname) → app | privacy | not-found (+ routes.test.ts)
+pages/          PrivacyPage, NotFoundPage + pages.css (independientes de la sala y del socket)
 pwa.ts          useServiceWorkerUpdate(): registra el SW, detecta versión en espera, apply() = skipWaiting + reload
 app.css         estilos del banner de actualización
 shared/
@@ -526,10 +549,17 @@ index.js              bootstrap: env → webpush → initDb → app/io → handl
 config/
   env.js              process.loadEnvFile() + valida VAPID_* (falla rápido, exit 1) + objeto `config` (incluye `backupDir`)
   webpush.js          webpush.setVapidDetails con config.vapid
-  cors.js             ALLOWED_ORIGINS, isOriginAllowed, corsOrigin (firma (origin, cb))
+  cors.js             parseOrigins (CLIENT_ORIGIN: varios, normalizados, solo http/https), createOriginChecker({ allowedOrigins, allowLocalhost }), isOriginAllowed, corsOrigin (firma (origin, cb)); aviso al arrancar si falta CLIENT_ORIGIN en producción
+  cors.test.js        unit: normalización, solo los orígenes configurados (otro esquema/puerto/subdominio fuera), ya no vale cualquier *.vercel.app, localhost solo en desarrollo, orígenes inválidos o "null"
 lib/
   logger.js           logger mínimo con niveles (error/warn/info/debug, umbral `LOG_LEVEL`, default info)
   rateLimit.js        createRateLimiter({ windowMs, max }) — ventana deslizante en memoria
+  tokenBucket.js      createTokenBucket({ capacity, refillPerSec }) — ráfaga + ritmo sostenido (límite de mensajes por socket)
+  ipGuard.js          createIpGuard — sockets abiertos y conexiones/minuto por IP, faltas y baneo temporal, sweep
+  concurrency.js      createConcurrencyLimiter({ concurrency, maxQueue }) — scrypt acotado; BUSY con la cola llena
+  protection.test.js  unit (con reloj falso) de tokenBucket, ipGuard y concurrency
+  clientIp.js         resolveClientIp({ forwardedFor, address, trustProxy, hops }) — IP para el rate limiting: la que añadió NUESTRO proxy (última entrada de X-Forwarded-For; `hops` para varios proxies), nunca la primera
+  clientIp.test.js    unit: sin TRUST_PROXY, un proxy, primera entrada falseada, dos proxies, hops mayor que las entradas, encabezado ausente/vacío/no string
   time.js             zonedWallTimeToInstant/tzOffsetMs (zona horaria de sala), isValidTimeZone, nextTimestamp (ISO ms monótono, compartido por notas y eventos)
   time.test.js        unit: zonedWallTimeToInstant en varias zonas/estaciones, isValidTimeZone, nextTimestamp
 db/
@@ -538,6 +568,7 @@ db/
   schema.js           createSchema() — CREATE TABLE IF NOT EXISTS + todos los índices (esquema completo, sin ALTER)
   migrations.js       runMigrations() — addColumnIfMissing(table, column, definition): ALTER TABLE ADD COLUMN si PRAGMA table_info dice que falta (idempotente); hoy añade note.pinned y las tres columnas de atribución de bookmark y de list (ignora una tabla que aún no existe)
   migrations.test.js  unit: crea a mano la tabla `note` con el esquema ANTERIOR (sin la columna nueva, simulando una calendario.db real de antes de este cambio) y comprueba que runMigrations() la añade con un valor por defecto sano; idempotencia
+  quotas.js           countInRoom / hasRoomFor (lista cerrada de tablas), countRooms, countItemsInList
   index.js            initDb() = createSchema + runMigrations; closeDb() = wal_checkpoint(TRUNCATE) + db.close(); barrel de las queries
   rooms.js / events.js / lists.js / notes.js / push.js / members.js / bookmarks.js   queries por dominio (rooms.js: createRoom/verifyRoomAccess/updateRoomTimezone; events.js: updateEvent con concurrencia optimista; members.js: upsertRoomMember/touchRoomMember/getRoomMembers sobre `room_member`; bookmarks.js: create/update parcial/applyPreview/failStalePreviews/delete/restore + renameTag/deleteTag/restoreBookmarkTags —una transacción por sala— + sanitizeTags/placeholderTitle)
 auth/
@@ -555,12 +586,16 @@ services/
   linkPreview.test.js unit: rangos privados IPv4/IPv6, parseo OG (entidades, imagen relativa, esquema peligroso), y contra un servidor local: gzip, charset, redirects, bucle, imagen/PDF, HTTP de error, plazo, tope de tamaño, y que localhost/IPs privadas/redirects hacia la red interna NO llegan a conectar
   undo.js             stash/pop — tombstones de borrados en memoria (ventana 12s)
 http/
-  app.js              createApp() — express + cors + json (límite 256kb, alineado con MAX.noteBody) + health
-  io.js               createIo(httpServer) — new Server con cors de config/cors.js
+  app.js              createApp({ httpLimitPerMinute? }) — sin x-powered-by, securityHeaders, cors, límite HTTP por IP, json (límite 256kb, alineado con MAX.noteBody), health, 404 y errores en JSON
+  security.js         securityHeaders, createHttpLimiter, notFoundHandler, errorHandler
+  ip.js               ipOf(headers, address) → { ip, reliable } (+ aviso único si llega X-Forwarded-For sin TRUST_PROXY)
+  io.js               createIo(httpServer) — new Server con cors, maxHttpBufferSize y allowRequest (origen, baneo, límites de conexión por IP); monta sockets/guard.js
   health.js           GET /health
 sockets/
   index.js            registerSocketHandlers(io) — io.on('connection') registra los 7 grupos
   helpers.js          isNonEmptyString, isAuthedFor, markAuthed, broadcast(io, room, ev, payload)
+  guard.js            attachSocketGuard(io, ipGuard) — contabilidad de conexiones por IP, cubos de fichas por socket (todo / escrituras), faltas → baneo; expone socket.data.strike
+  quota.js            withinQuota(socket, errorEvent, kind, room, adding) — cuota por sala con mensaje en español
   handler.js          safeOn / safeAuthedOn — try/catch + logger + emit de error; reenvían el ack de socket.io al handler; safeAuthedOn además exige isAuthedFor(payload.room)
   validate.js         MAX (longitudes) + MIN_PASSWORD, str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
   presence.js         `presence`/`get-presence`/`update-identity` con identidad (room → Map<socketId, {name, color, deviceId}>, poblado por setPresence() en join-room —que además hace upsert en `room_member` si el device_id es válido— y refrescado en vivo por update-identity) + handler `disconnecting` (touch de `last_seen_at` cuando se va el último socket de ese dispositivo) + `buildPeople` puro (fusiona sockets vivos + miembros persistidos: uno por dispositivo, conectados primero)
@@ -569,7 +604,10 @@ sockets/
 test/
   setup.js            --import de `pnpm test`: env de prueba + DB_PATH y BACKUP_DIR temporales por proceso (se borran al salir)
   helpers.js          startTestServer() (compone app/io/handlers sin index.js ni webpush), connect(), once()
-  handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit
+  guard.test.js       protección por conexión/socket con límites bajos: uso normal intacto, inundación descartada con "rate-limited", cubo de escrituras, baneo por faltas (cierra sockets, rechaza conexiones, caduca), máx. sockets por IP, conexiones/minuto, IP no fiable sin límites, mensaje demasiado grande, origen comprobado también en WebSocket y polling
+  hardening.test.js   mismo mensaje para sala inexistente y contraseña incorrecta, salas por IP y hora (nombre cogido no gasta), tope global, cuotas de notas/eventos (serie entera)/listas e ítems (clonación)/marcadores/push, create-event por minuto
+  http-security.test.js  cabeceras, sin x-powered-by, 404 y errores en JSON sin traza, 413, 429 con Retry-After, origen ajeno sin cabeceras CORS
+  handlers.test.js    integración socket: create/join-room, auth por sala, CRUD de eventos, serie, payload inválido, rate limit (también que falsear la primera entrada de X-Forwarded-For no lo salta)
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
   presence.test.js    presence con nombre/color al entrar y salir; identidad ausente/inválida cae a valores por defecto; update-identity refresca en vivo (uno mismo y el resto) y exige estar autenticado en la sala; miembros: el desconectado sigue en la lista con `last_seen_at`, varias pestañas del mismo dispositivo cuentan una vez, renombrarse no deja fantasma, sin device_id válido no se persiste, orden de `buildPeople`
@@ -604,12 +642,24 @@ test/
   mano (su clave de sala es `name`). `unsubscribe-push` exige solo estar autenticado
   en alguna sala (el `endpoint` es opaco).
 - **Rate limiting:** `create-room` y `join-room` limitan a 10 intentos por IP y
-  minuto (`sockets/rooms.js`). La IP viene de `socket.handshake.address`, o de
-  `X-Forwarded-For` solo si `TRUST_PROXY=true`.
+  minuto (`sockets/rooms.js`). La IP la resuelve `resolveClientIp` (`lib/clientIp.js`):
+  `socket.handshake.address` salvo con `TRUST_PROXY=true`, que usa `X-Forwarded-For`.
+  **Se toma la entrada que añadió NUESTRO proxy (la última; la antepenúltima con
+  `TRUST_PROXY_HOPS=2`, etc.), nunca la primera**: ese encabezado se construye por
+  anexión y lo que va delante lo escribe el cliente — con la primera entrada bastaba
+  variarla en cada intento para saltarse el límite y probar contraseñas de sala sin freno
+  (test de integración en `handlers.test.js`). Detrás de un proxy `TRUST_PROXY=true` es
+  **obligatorio**: sin él todos los usuarios comparten la IP del proxy y el límite de 10/min
+  es para toda la app; el servidor avisa una vez en el log si ve `X-Forwarded-For` con
+  `TRUST_PROXY` desactivado. Sin proxy delante, déjalo desactivado (con `true` el cliente
+  podría falsear su IP).
 - **Validación de payloads:** cada handler valida forma y longitudes en el borde
   (`sockets/validate.js`); un payload inválido → `return` sin persistir.
 
 ## Para deploy
 
-- Actualizar origen CORS: variable de entorno `CLIENT_ORIGIN` (leída en `server/config/env.js`, usada por `server/config/cors.js`)
-- Actualizar URL del socket en `client/src/socket.ts` (variable `VITE_SOCKET_URL`, con fallback a `http://localhost:3001`) con la URL real del servidor
+- **Servidor** (necesita un proceso siempre activo con WebSockets y un **disco persistente** para SQLite: no vale una plataforma serverless como Vercel; sí Fly.io/Railway/Render con volumen o un VPS). Variables (ver `server/.env.example`): `NODE_ENV=production`, `CLIENT_ORIGIN` (origen(es) exacto(s) del cliente, obligatorio), `TRUST_PROXY=true` (+ `TRUST_PROXY_HOPS` si hay más de un proxy) detrás de un proxy, `VAPID_*` (obligatorias), `PORT`, y `DB_PATH` / `BACKUP_DIR` apuntando al volumen persistente. Los backups se guardan en el mismo disco que la base de datos: si hace falta protegerse de perder el disco, copiarlos fuera.
+- **Cliente** (build estático): `VITE_SOCKET_URL` (URL pública del servidor, con `https://`) y `VITE_VAPID_PUBLIC_KEY` (la MISMA clave pública que el servidor) se fijan **al construir**. La URL del socket se lee en `client/src/socket/client.ts`.
+- **Privacidad**: el correo de contacto de `/privacidad` es `faenabernat@gmail.com` por defecto (`VITE_PRIVACY_CONTACT` lo cambia). Si el servicio se abre al público o tiene fines comerciales, que revise el texto un profesional.
+- **CSP del cliente**: `connect-src` en `client/vercel.json` permite cualquier `https:`/`wss:` porque la URL del servidor no se conoce en el repo; tras desplegar conviene restringirlo a esa URL (`connect-src 'self' https://api.tu-dominio wss://api.tu-dominio`). `vercel.json` es específico de Vercel: en otro alojamiento hay que replicar sus cabeceras, el rewrite de `/privacidad` y el `404.html`.
+- HTTPS en cliente y servidor: la PWA instalable, las notificaciones push, el portapapeles y "Compartir" no funcionan sin él (y un cliente https no puede hablar con un servidor http: contenido mixto).

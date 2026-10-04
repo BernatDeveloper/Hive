@@ -1,11 +1,12 @@
 import {
-  createList, updateListTitle, deleteList, cloneList, touchList, getListAttribution,
+  createList, updateListTitle, deleteList, cloneList, touchList, getListAttribution, countItemsInList,
   createListItem, toggleListItem, updateListItemText, clearCompletedItems, deleteListItem,
 } from '../db/index.js'
 import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
 import { MAX, str } from './validate.js'
+import { withinQuota } from './quota.js'
 
 export function registerListHandlers(io, socket) {
   // Marca la lista como modificada por quien hizo el cambio y lo difunde
@@ -20,6 +21,7 @@ export function registerListHandlers(io, socket) {
   safeAuthedOn(socket, 'create-list', 'list-error', { message: 'No se pudo crear la lista' }, ({ room, title, editor_name, editor_color }) => {
     const safeTitle = typeof title === 'string' ? title.trim() : ''
     if (!safeTitle || safeTitle.length > MAX.listTitle) return
+    if (!withinQuota(socket, 'list-error', 'list', room)) return
     const list = createList(room, safeTitle, { name: editor_name, color: editor_color })
     broadcast(io, room, 'list-created', list)
   })
@@ -44,6 +46,8 @@ export function registerListHandlers(io, socket) {
   // Duplica una lista con sus ítems (sin marcar) — plantilla rápida.
   safeAuthedOn(socket, 'clone-list', 'list-error', { message: 'No se pudo clonar la lista' }, ({ room, id, editor_name, editor_color }) => {
     if (!str(id, MAX.id)) return
+    if (!withinQuota(socket, 'list-error', 'list', room)) return
+    if (!withinQuota(socket, 'list-error', 'list_item', room, countItemsInList(id))) return
     const result = cloneList(id, { name: editor_name, color: editor_color })
     if (!result) return
     broadcast(io, room, 'list-cloned', result)
@@ -54,6 +58,7 @@ export function registerListHandlers(io, socket) {
     if (!str(listId, MAX.id)) return
     const safeText = typeof text === 'string' ? text.trim() : ''
     if (!safeText || safeText.length > MAX.listItemText) return
+    if (!withinQuota(socket, 'list-error', 'list_item', room)) return
     const item = createListItem(listId, room, safeText)
     broadcast(io, room, 'list-item-created', item)
     markModified(room, listId, payload)

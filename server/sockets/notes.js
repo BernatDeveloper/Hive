@@ -3,11 +3,13 @@ import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
 import { MAX, str, isObject } from './validate.js'
+import { withinQuota } from './quota.js'
 
 export function registerNoteHandlers(io, socket) {
   safeAuthedOn(socket, 'create-note', 'note-error', { message: 'No se pudo crear la nota' }, ({ room, title, editor_name, editor_color }) => {
     const trimmed = typeof title === 'string' ? title.trim() : ''
     const safeTitle = trimmed && trimmed.length <= MAX.noteTitle ? trimmed : 'Sin título'
+    if (!withinQuota(socket, 'note-error', 'note', room)) return
     const note = createNote(room, safeTitle, editor_name, editor_color)
     broadcast(io, room, 'note-created', note)
   })

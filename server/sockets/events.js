@@ -6,6 +6,9 @@ import {
   resetReminderSent,
 } from '../db/index.js'
 import { generateRecurrenceInstances } from '../services/recurrence.js'
+import { createRateLimiter } from '../lib/rateLimit.js'
+import { LIMITS } from '../config/limits.js'
+import { withinQuota } from './quota.js'
 import { stash } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
@@ -16,6 +19,9 @@ function eventLabel(rows) {
   return rows.length > 1 ? `«${title}» y ${rows.length - 1} más` : `«${title}»`
 }
 
+// Cada create-event puede ser una serie de hasta 365 filas: acotado por socket.
+const createEventLimiter = createRateLimiter({ windowMs: 60_000, max: LIMITS.createEventsPerMinute })
+
 const SCOPES = new Set(['single', 'future', 'all'])
 // 'all' por defecto = comportamiento anterior (clientes que no mandan scope).
 const scopeOf = v => (SCOPES.has(v) ? v : 'all')
@@ -23,13 +29,18 @@ const scopeOf = v => (SCOPES.has(v) ? v : 'all')
 export function registerEventHandlers(io, socket) {
   safeAuthedOn(socket, 'create-event', 'event-error', { message: 'No se pudo crear el evento' }, ({ room, event }) => {
     if (!isValidEventInput(event)) return
+    if (!createEventLimiter(socket.id).allowed) {
+      return socket.emit('event-error', { message: 'Estás creando eventos demasiado rápido. Espera un momento.' })
+    }
     const safeEvent = { ...event, title: event.title.trim() }
 
     if (safeEvent.recurrence_rule && safeEvent.recurrence_rule !== 'none') {
       const { instances } = generateRecurrenceInstances(safeEvent, safeEvent.recurrence_rule)
+      if (!withinQuota(socket, 'event-error', 'event', room, instances.length)) return
       const created = createEventsBatch(room, instances)
       broadcast(io, room, 'events-created', created)
     } else {
+      if (!withinQuota(socket, 'event-error', 'event', room)) return
       const created = createEvent(room, { ...safeEvent, recurrence_rule: null, recurrence_id: null })
       broadcast(io, room, 'event-created', created)
     }

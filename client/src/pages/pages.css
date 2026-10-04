@@ -1,0 +1,97 @@
+/* Páginas estáticas (404 y política de privacidad). Usan los tokens de
+   index.css; no dependen de ninguna sala (que es la que cambia los colores). */
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1.25rem 3rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.page-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.75rem;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.page-brand-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--primary-text);
+}
+
+/* ─── 404 ─── */
+.page--center { justify-content: center; text-align: center; }
+.notfound-code {
+  font-size: clamp(5rem, 22vw, 9rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.06em;
+  background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.35));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: pageFloatIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.notfound-title { margin-top: 0.5rem; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+.notfound-text { margin-top: 0.5rem; max-width: 360px; color: var(--muted); line-height: 1.55; }
+.notfound-actions { margin-top: 1.75rem; display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; }
+.notfound-actions a { text-decoration: none; }
+@keyframes pageFloatIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ─── Política de privacidad ─── */
+.legal {
+  width: 100%;
+  max-width: 760px;
+  padding: 2rem 2.25rem 2.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  line-height: 1.65;
+  animation: pageFloatIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.legal h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.03em; }
+.legal-updated { margin-top: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+.legal-lead { margin-top: 1rem; color: var(--muted); }
+.legal h2 { margin-top: 2rem; font-size: 1.05rem; font-weight: 700; letter-spacing: -0.015em; }
+.legal p, .legal ul { margin-top: 0.6rem; font-size: 0.92rem; }
+.legal ul { padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.legal li::marker { color: var(--muted); }
+.legal a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.legal code {
+  padding: 0.08rem 0.35rem;
+  background: var(--surface-2);
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+.legal-note {
+  margin-top: 1rem;
+  padding: 0.75rem 0.95rem;
+  background: rgba(var(--primary-rgb), 0.07);
+  border: 1px solid rgba(var(--primary-rgb), 0.2);
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+}
+.legal-back { display: inline-block; margin-top: 2rem; font-size: 0.9rem; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .page { padding: 1.25rem 0.75rem 2rem; }
+  .legal { padding: 1.4rem 1.15rem 1.75rem; border-radius: var(--radius-lg); }
+  .legal h1 { font-size: 1.4rem; }
+}

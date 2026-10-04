@@ -1,8 +1,23 @@
+import { randomBytes } from 'node:crypto'
 import { db } from './connection.js'
 import { hashPassword, verifyPassword } from '../auth/password.js'
 import { isValidTimeZone } from '../lib/time.js'
 
 const DEFAULT_TIMEZONE = 'Europe/Madrid'
+
+// Un único mensaje para "no existe" y "contraseña incorrecta": si no, el
+// formulario de acceso serviría para averiguar qué nombres de sala existen.
+export const BAD_CREDENTIALS = 'Sala o contraseña incorrectas'
+
+// Para que tampoco el TIEMPO delate si una sala existe: con una sala real se
+// ejecuta scrypt (decenas de ms) y con una inexistente se haría una respuesta
+// instantánea. Se verifica contra un hash de relleno para que cueste lo mismo.
+let dummyHash = null
+const getDummyHash = () => (dummyHash ??= hashPassword(randomBytes(16).toString('hex')))
+
+export function roomExists(name) {
+  return !!db.prepare('SELECT 1 FROM room WHERE name = ?').get(name)
+}
 
 export async function createRoom(name, password, timezone) {
   if (db.prepare('SELECT name FROM room WHERE name = ?').get(name)) {
@@ -22,9 +37,12 @@ export async function createRoom(name, password, timezone) {
 
 export async function verifyRoomAccess(name, password) {
   const room = db.prepare('SELECT * FROM room WHERE name = ?').get(name)
-  if (!room) return { ok: false, error: 'La sala no existe' }
+  if (!room) {
+    await verifyPassword(password, await getDummyHash())
+    return { ok: false, error: BAD_CREDENTIALS }
+  }
   if (!(await verifyPassword(password, room.password_hash))) {
-    return { ok: false, error: 'Contraseña incorrecta' }
+    return { ok: false, error: BAD_CREDENTIALS }
   }
   const styles = db.prepare('SELECT * FROM room_style WHERE room = ?').get(name)
   return {

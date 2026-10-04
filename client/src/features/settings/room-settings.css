@@ -178,6 +178,8 @@
   transition: background var(--transition-fast);
 }
 .settings-row:last-child { border-bottom: none; }
+/* La fila de la política de privacidad es un enlace, no un botón. */
+a.settings-row { text-decoration: none; color: inherit; }
 .settings-row:hover { background: var(--surface-2); }
 .settings-row:disabled { opacity: 0.4; cursor: default; }
 .settings-row:disabled:hover { background: transparent; }

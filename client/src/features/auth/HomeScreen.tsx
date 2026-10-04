@@ -47,6 +47,9 @@ export default function HomeScreen({ onCreate, onJoin, notice, noticeTone = 'err
           salas sin actividad durante 2 años y los eventos de hace más de 3
           años se eliminan automáticamente.
         </p>
+        <p className="auth-legal-link">
+          <a href="/privacidad" target="_blank" rel="noopener noreferrer">Política de privacidad</a>
+        </p>
       </div>
     </div>
   )

@@ -9,6 +9,7 @@ import { createRateLimiter } from '../lib/rateLimit.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
 import { MAX, str } from './validate.js'
+import { withinQuota } from './quota.js'
 
 // Cada alta o reintento hace que el servidor descargue una página ajena:
 // limitamos tanto cuántas descargas corren a la vez como cuántas puede pedir
@@ -62,6 +63,7 @@ export function registerBookmarkHandlers(io, socket) {
     if (!checkRate(socket.id).allowed) {
       return socket.emit('bookmark-error', { message: 'Demasiados enlaces seguidos, espera un momento' })
     }
+    if (!withinQuota(socket, 'bookmark-error', 'bookmark', room)) return
     const bookmark = createBookmark(room, href, editor_name, editor_color)
     broadcast(io, room, 'bookmark-created', bookmark)
     void loadPreview(io, room, bookmark)

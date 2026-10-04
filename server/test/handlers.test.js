@@ -133,6 +133,21 @@ test('payload inválido: no persiste ni tumba el handler', async () => {
   assert.equal(g.events.length, 1)
 })
 
+test('rate limiting: variar la PRIMERA entrada de X-Forwarded-For no salta el límite', async () => {
+  // El cliente controla lo que va delante; la IP fiable es la que añade el
+  // proxy (la última). Cada intento falsea una IP distinta por delante.
+  let limitedAt = -1
+  for (let i = 1; i <= 13; i++) {
+    const s = client(`9.9.9.${i}, 10.250.0.5`)
+    await once(s, 'connect')
+    s.emit('join-room', { name: 'no-existe', password: 'x' })
+    const msg = await once(s, 'access-denied')
+    if (/demasiados intentos/i.test(msg) && limitedAt === -1) limitedAt = i
+    s.close()
+  }
+  assert.ok(limitedAt > 0 && limitedAt <= 12, `esperaba corte hacia el 11 pese a falsear la primera entrada, fue ${limitedAt}`)
+})
+
 test('rate limiting: corta tras 10 intentos de auth por IP', async () => {
   const s = client('10.9.9.99')
   await once(s, 'connect')

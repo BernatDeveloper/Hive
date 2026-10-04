@@ -11,6 +11,10 @@ export function savePushSubscription(room, subscription) {
   `).run(randomUUID(), room, endpoint, keys.p256dh, keys.auth, new Date().toISOString())
 }
 
+export function hasPushSubscription(endpoint) {
+  return !!db.prepare('SELECT 1 FROM push_subscription WHERE endpoint = ?').get(endpoint)
+}
+
 export function deletePushSubscription(endpoint) {
   db.prepare('DELETE FROM push_subscription WHERE endpoint = ?').run(endpoint)
 }

@@ -27,6 +27,9 @@ export const config = {
   // Confiar en X-Forwarded-For para la IP del cliente (rate limiting). Poner a
   // 'true' SOLO detrás de un proxy inverso propio que reescriba esa cabecera.
   trustProxy: process.env.TRUST_PROXY === 'true',
+  // Cuántos proxies de confianza hay delante de la app (1 = el de la
+  // plataforma; 2 = p. ej. CDN + balanceador). Ver lib/clientIp.js.
+  trustProxyHops: Math.max(1, Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '', 10) || 1),
   vapid: {
     subject: process.env.VAPID_SUBJECT,
     publicKey: process.env.VAPID_PUBLIC_KEY,
