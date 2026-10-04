@@ -1,6 +1,6 @@
 # Calendario Compartido
 
-App de organización colaborativa en tiempo real. Los usuarios crean salas protegidas con contraseña y comparten módulos (calendario, listas y notas).
+App de organización colaborativa en tiempo real. Los usuarios crean salas protegidas con contraseña y comparten módulos (calendario, listas, notas y marcadores).
 
 ## Stack
 
@@ -44,7 +44,7 @@ node node_modules/.pnpm/prebuild-install@*/node_modules/prebuild-install/bin.js 
 - Acceso por sala: nombre custom + contraseña obligatoria. Salas **nuevas**: mínimo 8 chars, validado en cliente (`CreateRoomForm` + indicador de fortaleza) y en servidor (`MIN_PASSWORD` en `sockets/validate.js`). `join-room` no re-valida longitud (salas antiguas con contraseñas cortas siguen funcionando)
 - Toda la sincronización es por Socket.io (no REST para datos de app; solo existe `GET /health`)
 - SQLite guarda los datos en `server/calendario.db`
-- Limpieza automática (`server/services/cleanup.js`, `startCleanupScheduler`, al arrancar y cada 24h): salas sin **ninguna** actividad (evento/ítem/nota) en más de **2 años** se eliminan; eventos cuyo `end` quedó hace más de **3 años** se borran fila a fila (nunca por `recurrence_id`, para no arrastrar instancias futuras de una serie con historial viejo)
+- Limpieza automática (`server/services/cleanup.js`, `startCleanupScheduler`, al arrancar y cada 24h): salas sin **ninguna** actividad (evento/ítem/nota/marcador) en más de **2 años** se eliminan; eventos cuyo `end` quedó hace más de **3 años** se borran fila a fila (nunca por `recurrence_id`, para no arrastrar instancias futuras de una serie con historial viejo)
 - Backup automático (`server/services/backup.js`, `startBackupScheduler`, al arrancar y cada 24h): `VACUUM INTO` a `backups/calendario-YYYY-MM-DD.db` (ruta configurable con `BACKUP_DIR`), conserva las últimas 14 copias
 - Apagado ordenado: `SIGTERM`/`SIGINT` cierran `io` (que cierra el HTTP server), hacen `wal_checkpoint(TRUNCATE)` y `db.close()` (`closeDb()` en `db/index.js`) antes de salir, con un timeout de guardia de 5s
 - CORS de Socket.io: en dev acepta cualquier puerto de `localhost`/`127.0.0.1` (`isOriginAllowed` en `server/config/cors.js`); en producción solo `ALLOWED_ORIGINS` (`CLIENT_ORIGIN`) y `*.vercel.app` — mantener `CLIENT_ORIGIN` en sync con la URL real del cliente
@@ -135,6 +135,23 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | created_at | TEXT | ISO datetime |
 | updated_at | TEXT | ISO datetime |
 
+### Tabla `bookmark`
+| column | type | notes |
+|--------|------|-------|
+| id | TEXT PK | UUID generated on server |
+| room | TEXT FK→room.name | ON DELETE CASCADE |
+| url | TEXT | siempre http(s), ≤2048; se normaliza (sin esquema → `https://`) |
+| title | TEXT | al guardar es el dominio sin `www.` (provisional, `placeholderTitle`); la vista previa lo sustituye por el título real **solo si sigue siendo ese provisional** |
+| description | TEXT | default ''; la vista previa la rellena solo si está vacía (lo que escribió una persona manda) |
+| image | TEXT | nullable; URL http(s) de la imagen `og:image` (el navegador la carga directamente) |
+| site_name | TEXT | nullable; `og:site_name` |
+| tags | TEXT | array JSON de strings (≤10 de ≤30 chars, minúsculas, sin `#`, sin duplicados — `sanitizeTags`); en cliente es `string[]` |
+| favorite | INTEGER | 0/1 → boolean |
+| seen | INTEGER | 0/1 → boolean; "visto/leído" (false = pendiente) |
+| preview_status | TEXT | `pending` → `done` \| `failed`. Al arrancar, los `pending` que quedaron a medias pasan a `failed` (`failStalePreviews` en `initDb`) |
+| added_by_name / added_by_color | TEXT | nullable; identidad de dispositivo de quien lo guardó — informativa, spoofeable |
+| created_at / updated_at | TEXT | ISO; `updated_at` cuenta como actividad para la limpieza de salas |
+
 ### Tabla `room_member`
 | column | type | notes |
 |--------|------|-------|
@@ -161,6 +178,10 @@ No existe columna `category`: se eliminó por completo (el color es el único ej
 | `update-note` | `{ room, note: { id, title, body, updated_at, editor_name?, editor_color? } }` | **ack** `{ status: 'ok'\|'conflict'\|'not-found', note? }` al emisor; en `'ok'` además `note-updated` (room broadcast). `updated_at` = versión base para concurrencia optimista |
 | `toggle-note-pin` | `{ room, id, pinned }` | `note-updated` (room broadcast) — fijar/desfijar arriba del todo; no toca `updated_at` ni pasa por concurrencia optimista (ver `setNotePinned`) |
 | `delete-note` | `{ room, id }` | `note-deleted` (broadcast) + ack `{ undoToken, label }` |
+| `create-bookmark` | `{ room, url, editor_name?, editor_color? }` | `bookmark-created` al instante (`preview_status: 'pending'`, título = dominio) y, cuando el servidor termina de leer la página, `bookmark-updated` con la tarjeta completa. URL inválida → `bookmark-error` `{ message }` solo al emisor. Máx. 30 altas+reintentos por minuto y socket |
+| `update-bookmark` | `{ room, id, title?, description?, tags?, favorite?, seen? }` | `bookmark-updated` (room broadcast). Edición parcial: solo se tocan los campos presentes y con el tipo correcto; last-write-wins. Título vacío vuelve al provisional |
+| `refresh-bookmark` | `{ room, id }` | `bookmark-updated` (`pending`) y luego otro con el resultado — reintenta la vista previa (botón "Reintentar" / "Recargar vista previa"); no pisa lo que se escribió a mano |
+| `delete-bookmark` | `{ room, id }` | `bookmark-deleted` (broadcast, `id`) + ack `{ undoToken, label }` |
 | `create-list` | `{ room, title }` | `list-created` (room broadcast) |
 | `update-list` | `{ room, id, title }` | `list-updated` (room broadcast) — renombrar, sin control de versión (last-write-wins) |
 | `clone-list` | `{ room, id }` | `list-cloned` (`{ list, items }`, room broadcast) — duplica la lista con todos sus ítems, sin marcar; título `"<original> (copia)"` |
@@ -186,7 +207,8 @@ socket (`sockets/presence.js`).
   events: Event[],
   lists: List[],
   listItems: ListItem[],
-  notes: Note[]
+  notes: Note[],
+  bookmarks: Bookmark[]
 }
 ```
 
@@ -225,6 +247,21 @@ mostrando la hora de pared tal cual para todos, en cualquier navegador.
   para traer la `timezone` de cada candidato, con una ventana ±18h (más ancha
   que el propio disparo) para no descartar candidatos de borde antes de que
   `effectiveStart` los evalúe zone-aware.
+
+## Marcadores y vista previa de enlaces
+
+Módulo para guardar enlaces (tutoriales, productos, artículos…). Al pegar una URL el servidor crea la tarjeta **al instante** (título = dominio, `preview_status: 'pending'`, con un barrido de brillo en el cliente) y en segundo plano **descarga la página** para rellenar título, descripción, imagen y nombre del sitio desde sus etiquetas Open Graph (`server/services/linkPreview.js`, `loadPreview` en `sockets/bookmarks.js`); al terminar difunde `bookmark-updated`. Si falla (bloqueado, sin respuesta, HTTP de error) la tarjeta queda como `failed` con un botón "Reintentar".
+
+**Seguridad (SSRF):** hacer que el servidor pida una URL elegida por un usuario es el patrón clásico de SSRF, así que `linkPreview.js`:
+- solo acepta `http`/`https` sin credenciales en la URL;
+- resuelve el DNS con un `lookup` propio (`guardedLookup`) que **rechaza cualquier dirección privada, loopback, link-local o reservada** (`isPrivateAddress`: 10/8, 127/8, 169.254/16 —incluye el servicio de metadatos de la nube—, 172.16/12, 192.168/16, CGNAT, multicast…, e IPv6 equivalentes, incluidas las mapeadas/NAT64/6to4 que llevan una IPv4 dentro). Se comprueba **en el momento de conectar**, así que un DNS que cambie entre la comprobación y la conexión (rebinding) no la esquiva; las IPs literales, que se saltan el `lookup`, se comprueban aparte. Si un nombre resuelve a una mezcla de públicas y privadas, se rechaza;
+- sigue los redirects **a mano** (máx. 4) y cada salto vuelve a pasar por lo mismo;
+- plazo total de 6 s, lee como mucho 2 MB (descomprimiendo gzip/deflate/br al vuelo) y deja de leer en cuanto ve `</head>`; solo parsea HTML (una imagen directa se usa como imagen de la tarjeta; un PDF u otro tipo = enlace válido sin metadatos);
+- máx. 4 descargas simultáneas en todo el proceso (`withPreviewSlot`) y rate limit por socket.
+
+`fetchLinkPreview(url, { allowPrivate })`: `allowPrivate` existe **solo para los tests** (servidor local); ningún handler lo pasa. YouTube y similares llevan ~700 KB de script inline antes de los meta tags, de ahí el tope de 2 MB.
+
+**Privacidad:** la imagen (`og:image`) y el favicon (`<origen>/favicon.ico`) los carga directamente el navegador de cada miembro desde el sitio original (con `referrerPolicy="no-referrer"`), no pasan por el servidor — ese sitio ve la IP de quien abre el módulo. Aceptado a propósito para no convertir el servidor en un proxy de imágenes.
 
 ## Concurrencia optimista (eventos y notas)
 
@@ -299,7 +336,7 @@ No existe `room_style.event_colors` (eliminado): no hay nada que gestionar en Aj
 4. Unirse: nombre + contraseña → `join-room` → Dashboard
    - Si el servidor no responde en 8s (o `connect_error`), el formulario muestra "No se puede conectar con el servidor…" y reactiva el botón (`awaitAuthResponse` en `socket/authFlow.ts`)
    - Al entrar con éxito (crear o unirse) la sala queda recordada en `localStorage` (`rememberRoom`, `socket/client.ts`) — una recarga de página no vuelve a pedir nombre/contraseña: `App.tsx` reintenta `join-room` solo al montar (pantalla "Entrando a tu sala…") y aterriza directo en el Dashboard si sigue siendo válida; si el servidor la rechaza (`access-denied`, p. ej. contraseña rotada o sala borrada) se olvida y se muestra la pantalla de inicio con el motivo. "Salir de la sala" (Ajustes) llama a `forgetRoom()` y borra esa entrada
-5. Dashboard: grid de módulos (Calendario, Listas y Notas, todos activos)
+5. Dashboard: grid de módulos (Calendario, Listas, Notas y Marcadores, todos activos) más una tarjeta **Gastos** desactivada ("Próximamente": borde discontinuo, atenuada, no es un botón — `UPCOMING` en `ModuleGrid.tsx`; solo la tarjeta, el módulo no existe aún)
 6. Click en módulo → abre el módulo (← Dashboard para volver; en móvil, el header muestra un menú hamburguesa con Ajustes/Salir)
 7. Ajustes ⚙ → modal de colores por sala con presets claro/oscuro, **zona horaria de la sala** (gobierna los recordatorios, no el display), **tu identidad** (nombre/color de dispositivo, global o solo para esta sala) y, al final, **exportar calendario (.ics)**, "Restablecer colores" y "Salir de la sala". Los colores de evento no se configuran aquí — son una paleta fija (ver "Colores de evento")
 8. Notificaciones push: si el usuario activa "Avisos en este dispositivo" (Ajustes de sala), recibe un aviso del sistema para cada evento según el recordatorio elegido en el modal, aunque la app esté cerrada — ver `NOTIFICACIONES.md`
@@ -307,7 +344,8 @@ No existe `room_style.event_colors` (eliminado): no hay nada que gestionar en Aj
 10. Tras un deploy: el SW nuevo espera; un banner "Hay una versión nueva — Recargar" (`src/pwa.ts`) lo activa (`skipWaiting` bajo demanda) y recarga
 11. Calendario, vistas **mes** y **día** (sin semana), sin panel lateral. Crear un evento sin fecha concreta: botón flotante "+" (esquina inferior derecha). Exportar `.ics` con todos los eventos: fila "Exportar calendario (.ics)" en Ajustes de sala (no en el calendario — ver `features/calendar/ics.ts`, generado en cliente). Navegación estilo Google Calendar: en vista mes, un clic en cualquier parte de un día (hueco vacío o sobre un evento) cambia a la vista día de esa fecha; si ese día no tenía ningún evento, además abre de inmediato el modal de uno nuevo — si ya tenía, solo navega, y desde la vista día se toca el evento que se quiera editar. El enlace "+N más" de un día con muchos eventos lleva igual a su vista día (`moreLinkClick="day"`), en vez del popover propio de FullCalendar; en móvil ese enlace se abrevia a "···". En vista día, seleccionar un hueco de hora sigue abriendo el modal de nuevo evento como siempre. En móvil, deslizar el dedo horizontalmente sobre la rejilla cambia de mes/día (equivalente táctil de "<"/">"), con un pequeño "tirón" animado en la dirección del swipe (`.calendar-swiping-next/prev`, limpiado por `onAnimationEnd`) para que el cambio no se note instantáneo. Los días fuera del mes actual se muestran atenuados (`.fc-day-other { opacity: 0.9 }` — lo bastante tenue para notarse, lo bastante alto para seguir leyéndose), no ocultos; cada celda tiene un alto mínimo (`.fc-daygrid-day-frame`) para que la última fila (normalmente días del mes siguiente) no se comprima hasta perder el número, con scroll vertical de respaldo en `.calendar-main` si aun así no cupieran las 6 filas. Los cinco botones del header (`<`, `>`, Hoy, Mes, Día) son cuadrados y del mismo tamaño; Hoy/Mes/Día muestran un icono en vez de texto (persona / calendario / reloj, vía `mask-image` con `currentColor` — el texto real sigue en el DOM para lectores de pantalla, solo se colapsa visualmente con `font-size: 0`); `<`/`>` ya traían su propio icono de FullCalendar. El título del header es más corto en móvil (`titleFormat={ month: 'short', year: 'numeric' }` → "dic 2026" en vez de "diciembre de 2026"), porque el nombre largo del mes no cabía en una línea junto a los botones y se partía en dos descuadrando el toolbar entero. Arrastrar un evento (ratón, o mantenerlo pulsado en táctil — gesto por defecto de FullCalendar con `editable`) mueve su fecha/hora; arrastrar su borde (vista día) redimensiona la duración. Una instancia de serie se desengancha sola (`scope: 'single'`) en vez de mover la serie entera sin preguntar; un evento único manda `expected_updated_at` como cualquier edición por modal, así que un conflicto real sigue avisando con el mismo banner. **Ojo con `transition` en `.fc .fc-event` (calendar.css): nunca con `!important`.** Al soltar sin mutación válida (misma celda en vista mes, o fuera de la rejilla en vista día) FullCalendar NO dispara `eventDrop` (dispara su `_noEventDrop` interno) y devuelve el clon flotante del evento a su sitio con un `transition: top/left` inline, esperando su `transitionend` para cerrar el arrastre — sin timeout de respaldo. El clon conserva la clase `.fc-event`; un `transition: … !important` ahí pisaba la inline, `transitionend` no llegaba nunca y el calendario quedaba bloqueado (evento original oculto, clon fantasma flotando, ningún arrastre más hasta recargar). Diagnosticado reproduciéndolo en Chrome headless vía CDP. Soltar en OTRA celda en vista mes también se anima: mientras se arrastra, un clon flotante sigue al cursor y al soltar FullCalendar lo borra al instante y pinta el evento en su celda nueva (salto brusco). `handleEventDragStart` escucha el "soltar" (`pointerup`/`mouseup`/`touchend`) en fase de captura en `window` — llega antes que los listeners de FullCalendar en `document`, con el clon aún en su sitio — y guarda su posición; `handleEventDrop` (si el cambio se aceptó) busca el elemento real por `data-event-id` (puesto por `eventDidMount={tagEventEl}`) en un `requestAnimationFrame` y lo desliza desde ahí con un FLIP (`settleFrom`: `transform` + transición de `SETTLE_MS`, z-index alto en el harness mientras cruza la rejilla, y un `setTimeout` de respaldo por si `transitionend` no llega). En vista día no hace falta: la vista previa ya se dibuja en el destino, sin clon flotante. Comprobado que el eco del servidor (`event-updated`) no recrea el nodo a mitad de animación. En `commitEventChange` (que devuelve si el cambio se aceptó), una celda distinta que acaba en las mismas fechas (caso raro) no manda nada y llama a `info.revert()`, como FullCalendar espera de cualquier drop no aceptado. `fcEvents` está en `useMemo([events, primaryColor])`: el adaptador de React llama a `calendar.resetOptions()` en cada render de Calendar y FullCalendar compara `events` elemento a elemento por identidad — sin memo re-parseaba todos los eventos en cada render. `draggingEventRef` evita que el swipe de mes/día dispare navegación de más justo tras soltar en táctil; se marca ya al apoyar el dedo sobre un evento (no solo al confirmar FullCalendar que hubo arrastre), para cubrir también un arrastre fallido que acaba soltado en la misma celda. El color del evento durante el arrastre lo dan los props `eventColor`/`eventTextColor` (por defecto = primario de la sala, para el mirror de seleccionar un hueco nuevo) — un evento real manda el suyo propio y gana; antes se forzaba el primario por CSS en `.fc-event-mirror`, que FullCalendar reutiliza también para el mirror de arrastrar un evento YA coloreado en vista día, y lo pintaba mal mientras se arrastraba. El botón "Hoy" se marca como activo (misma clase `.fc-button-active` que Mes/Día) cuando el rango visible incluye la fecha de hoy — FullCalendar no lo hace solo por no ser un selector de vista; se calcula a mano en `datesSet`. Como FullCalendar además deshabilita (y atenúa) ese botón justo cuando hoy está a la vista, `.fc-today-button.fc-button-active:disabled` fuerza `opacity: 1` para que se vea igual de sólido que Mes/Día.
 12. Al borrar evento/lista/nota/ítem: toast "«X» eliminado — Deshacer" durante 10s (`useUndo` + `UndoToast` en Dashboard). El servidor guarda una copia (`services/undo.js`, ventana de 12s) y re-inserta con `undo-delete`
-13. Búsqueda global: icono 🔍 en el header del Dashboard abre `GlobalSearch`, un modal que busca por texto en eventos, notas e ítems de lista ya cargados en el cliente (sin red). Elegir un resultado navega al módulo correspondiente y lo abre: un evento salta a su vista día y abre `EventModal`; una nota o una lista se seleccionan como si se hubiera tocado en su barra lateral
+13. Búsqueda global: icono 🔍 en el header del Dashboard abre `GlobalSearch`, un modal que busca por texto en eventos, notas, ítems de lista y marcadores ya cargados en el cliente (sin red). Elegir un resultado navega al módulo correspondiente y lo abre: un evento salta a su vista día y abre `EventModal`; una nota o una lista se seleccionan como si se hubiera tocado en su barra lateral; un marcador abre el módulo, limpia los filtros, se desplaza hasta su tarjeta y la resalta
+14. Marcadores: arriba una barra con el campo "Pega un enlace…" (pegar un enlace válido lo guarda al instante; sin esquema se asume `https://`; un duplicado —`urlKey`: ignora esquema, `www.`, barra final y #fragmento— no se guarda, avisa "Ya tienes guardado este enlace" y resalta la tarjeta existente), filtros **Todos / Favoritos / Pendientes** con contadores, buscador (título, descripción, URL, sitio y etiquetas) y chips de etiquetas con su recuento (selección única; la etiqueta activa se suelta sola si deja de existir). Rejilla de tarjetas de igual alto por fila (imagen 16:9 o, sin imagen, un degradado cuyo tono sale del dominio, `domainHue`; favicon + sitio, título de 2 líneas, descripción, etiquetas clicables, "Tester · hace 2 min"). Acciones: favorito (estrella), visto (check; la tarjeta se atenúa), abrir, copiar enlace (con `execCommand` de respaldo fuera de contexto seguro), editar (`BookmarkModal`: título, descripción, etiquetas con coma/Enter —pegar «a, b» crea dos— y sugerencias de las ya usadas, "Recargar vista previa") y eliminar (con toast de deshacer). En móvil la barra superior scrollea junto con las tarjetas en vez de quedarse fija. Micro-animaciones: entrada escalonada, imagen que aparece con fundido, barrido de brillo mientras carga, "pop" al marcar favorito/visto/copiado, resalte al llegar desde la búsqueda. `.bookmark-card` usa `animation-fill-mode: backwards` (no `both`): con `forwards`, el `transform: none` final pisaría el `translateY` del hover
 
 ## Estructura de componentes
 
@@ -316,13 +354,14 @@ SocketProvider           # context de estado de conexión
 └── App                  # + useServiceWorkerUpdate() → banner "versión nueva"; si hay sala guardada, reintenta join-room sola al montar (pantalla "Entrando a tu sala…") antes de decidir RoomEntry vs Dashboard
     ├── ConnectionBanner # barra fija "Sin conexión…" cuando el socket lleva >3s sin conectar
     ├── RoomEntry        # home/identity/create/join — auth con timeout de red (awaitAuthResponse); IdentityForm si no hay identidad de dispositivo aún
-    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useRoomLost/usePresence + navegación (header con los miembros de la sala + buscador 🔍)
+    └── Dashboard        # composición: useRoomStyle/useEvents/useLists/useNotes/useBookmarks/useRoomLost/usePresence + navegación (header con los miembros de la sala + buscador 🔍)
         ├── RoomSettings # color modal con presets + zona horaria (emits update-room-style, update-room-timezone, subscribe-push)
         ├── GlobalSearch # buscador global (modal) — busca en events/notes/listItems ya cargados; onOpenEvent/onOpenNote/onOpenList navegan y abren el módulo correspondiente
         ├── Calendar     # calendar module (vistas mes/día, sin panel lateral) — recibe events + onCreate/Update/DeleteEvent por props; banner de conflicto de edición concurrente; jumpToEvent/onJumpHandled = apertura desde la búsqueda global
         │   └── EventModal   # create/edit/delete evento — color de la paleta, recurrencia, hora opcional
         ├── Lists        # lists module (sidebar + detail panel) — datos + callbacks por props; clonar lista (sidebar), anillo de progreso mini en el sidebar; focusListId/onFocusHandled = apertura desde la búsqueda global
-        └── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props; checklist en el cuerpo, fijar nota, contador de palabras/caracteres; focusNoteId/onFocusHandled = apertura desde la búsqueda global
+        ├── Notes        # notes module (sidebar + editor panel, auto-save 600ms) — datos + callbacks por props; checklist en el cuerpo, fijar nota, contador de palabras/caracteres; focusNoteId/onFocusHandled = apertura desde la búsqueda global
+        └── Bookmarks    # bookmarks module (barra de guardar/filtros + rejilla de tarjetas) — datos + callbacks por props; BookmarkModal para editar; focusBookmarkId/onFocusHandled = apertura desde la búsqueda global
 ```
 
 - `Calendar`, `Lists` y `Notes` son responsive: por debajo del breakpoint móvil (`useIsMobile`, 640px) muestran un solo panel a la vez (toggle sidebar ↔ detalle/calendario) en vez del layout de dos columnas de escritorio
@@ -384,6 +423,18 @@ interface ListItem {
   text: string; checked: boolean
 }
 
+type PreviewStatus = 'pending' | 'done' | 'failed'
+
+interface Bookmark {
+  id: string; room: string; url: string; title: string; description: string
+  image: string | null; site_name: string | null
+  tags: string[]; favorite: boolean
+  seen: boolean   // false = pendiente
+  preview_status: PreviewStatus
+  added_by_name: string | null; added_by_color: string | null
+  created_at: string; updated_at: string
+}
+
 interface Note {
   id: string; room: string; title: string
   body: string; pinned: boolean; created_at: string; updated_at: string
@@ -407,17 +458,18 @@ interface Note {
 features/
   auth/         RoomEntry (intercala IdentityForm antes de create/join si hace falta), HomeScreen (incluye aviso del modelo sin cuentas + retención), CreateRoomForm, JoinRoomForm + auth.css, password-strength.ts (MIN_PASSWORD=8 + heurística) + password-strength.test.ts
   identity/     identity.ts (Identity, IDENTITY_COLORS, IDENTITY_COLOR_NAMES, getIdentity/get·setGlobalIdentity/get·setRoomOverride/clearRoomOverride, getDeviceId — localStorage) + identity.test.ts (entorno jsdom vía `// @vitest-environment jsdom`), IdentityForm (alta única de nombre+color, color vía `ColorPickerPopover`)
-  dashboard/    Dashboard (miembros de la sala en el header — hasta 3 avatares + "+N", con desplegable de todos y su estado al clic) + dashboard.css, ModuleGrid + module-grid.css, useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
+  dashboard/    Dashboard (miembros de la sala en el header — hasta 3 avatares + "+N", con desplegable de todos y su estado al clic) + dashboard.css, ModuleGrid + module-grid.css (`MODULES` + `UPCOMING`: tarjetas desactivadas "Próximamente", hoy solo Gastos), useRoomLost (access-denied → onLeave), useUndo + UndoToast (toast de deshacer borrado)
   calendar/     Calendar (vistas mes/día con FullCalendar — dayGridPlugin + timeGridPlugin; navegación mes→día estilo Google Calendar vía dateClick/eventClick/moreLinkClick="day", ver "Flujo de usuario"; sin panel lateral, botón flotante `.calendar-fab` para nuevo evento; swipe horizontal táctil = prev/next, vía onTouchStart/onTouchEnd; `jumpToEvent`/`onJumpHandled` = abrir un evento desde la búsqueda global — abrir el modal es estado derivado de la prop (durante el render), navegar la vista toca `calendarRef` (imperativo) y por eso sigue en un efecto aparte) + calendar.css (banner de conflicto de evento + atribución; `.fc-day-today .fc-daygrid-day-number` dimensionado a propósito para ocupar el mismo alto que un número normal — si no, la fila con "hoy" sale más alta que el resto), EventModal (exporta el tipo EventSavePayload = Partial<Event> & { expected_updated_at? }; muestra "Editado por…" al editar; color vía `ColorPickerPopover` + `EVENT_COLORS`; validación visual solo tras un intento de guardar fallido — `.input-error`/`.field-error` en modal.css — para título vacío y hora de fin ≤ inicio, se desactiva sola en cuanto el dato deja de ser inválido; fechas vía `DateField`, wrapper local sobre `<input type="date"/"month">` que (a) oculta el icono nativo del navegador y superpone uno propio coloreado con `var(--text)` y (b) pinta el propio texto del input transparente y superpone el valor ya formateado `dd/mm/aaaa` — el formato del `<input type="date">` nativo lo decide el locale del navegador, no `lang` del HTML ni nada en CSS, igual que con `<input type="time">` y el porqué de TimeSelect; el `<input>` real sigue ahí intacto (valor, teclado, calendario nativo), solo cambia lo que se lee), eventColors.ts (paleta fija de colores de evento, ~30 tonos con nombre — ver "Colores de evento"), options.ts (recurrencia/recordatorio), useEvents (expone `conflict`/`dismissConflict`, escucha `event-conflict`, adjunta editor_name/editor_color a create/update vía getIdentity), dateUtils.ts (helpers de fecha puros: addDaysToDateStr, isoToLocalDate/Time, buildEventDates, formatLocalDate, localDateKey) + dateUtils.test.ts, ics.ts (export .ics: 1 VEVENT+RRULE por serie, individual para el resto, usado desde RoomSettings) + ics.test.ts
   lists/        Lists (título de lista e ítems editables en línea — `<input>`/lápiz al pasar el ratón, Enter/perder el foco guarda, Escape descarta; botón "Vaciar" junto a "Completados · N" para borrar de golpe los ya marcados; anillo de progreso SVG en vez de "N/M" plano — también en miniatura junto a cada lista del sidebar —, check con un pequeño "pop" al marcarse, aviso breve "¡Lista completada!" al marcar el último ítem — ver nota sobre `prevDone`/ajustar estado durante el render, no en un efecto, para no disparar el aviso al re-abrir una lista ya completa; botón "Clonar" solo en el sidebar (al pasar el ratón — no en la cabecera del detalle, para no duplicar la acción) duplica la lista con sus ítems sin marcar; editar/eliminar un ítem están siempre visibles (no solo al hover — en táctil no hay hover); `focusListId`/`onFocusHandled` = abrir una lista desde la búsqueda global, aplicado durante el render en vez de en un efecto puro de sincronizar prop→estado) + lists.css, useLists
   settings/     RoomSettings (colores de sala como lista de filas `.room-color-row` — donut + nombre + hex, cada `<label>` envuelve su `<input type="color">` real (oculto visualmente, no con `display:none`, para que el navegador delegue el click en todo el área y siga abriendo el selector nativo) + selector de zona horaria vía Intl.supportedValuesOf + sección "Tu identidad" + exportar .ics, vía `../calendar/ics`; sin sección de colores de evento — paleta fija, no configurable) + room-settings.css, useRoomStyle (colors + cssVars; fusiona — no sustituye — el estado de sala al recibir style-updated/room-timezone-updated, vía un ref con el valor más reciente)
   notes/        Notes (muestra "Editado por…" en la nota seleccionada; sin buscador propio — lo cubre la búsqueda global del Dashboard; checklist dentro del cuerpo: una línea `- [ ] texto`/`- [x] texto` (helpers puros en checklist.ts — parseChecklistLine/toggleChecklistLine/hasChecklistLine) se renderiza, mientras el textarea no tiene el foco, como una vista con checkboxes clicables en vez de texto plano; tocar la vista fuera de un checkbox vuelve a mostrar el textarea real y la enfoca (useEffect sobre `bodyFocused`); tocar un checkbox NO entra en modo edición, solo alterna esa línea y guarda igual que cualquier cambio de texto; notas sin ninguna línea de checklist siempre muestran el textarea tal cual, sin el modo vista; contador "N palabras · M caracteres" bajo el cuerpo; fijar arriba del todo con `IconPin` en el sidebar (siempre visible, no solo al hover — en táctil no hay hover) vía `toggle-note-pin`, que no toca `updated_at`; orden del sidebar: fijadas primero (el servidor ya manda `pinned DESC, updated_at DESC`); `focusNoteId`/`onFocusHandled` = abrir una nota desde la búsqueda global, aplicado durante el render en vez de en un efecto puro de sincronizar prop→estado) + notes.css, useNotes (concurrencia optimista por updated_at, ack de update-note, adjunta editor_name/editor_color vía getIdentity, `togglePin`)
-  search/       GlobalSearch (modal de búsqueda global — input + resultados agrupados por Eventos/Notas/Listas, Escape cierra) + globalSearch.css, search.ts (searchAll: filtro de texto puro, sin red, sobre events/notes/listItems ya cargados; insensible a mayúsculas, tope `perGroupLimit` por sección) + search.test.ts
+  bookmarks/    Bookmarks (barra de guardar + filtros + etiquetas, rejilla de `BookmarkCard`; pegar un enlace válido lo guarda al instante; duplicados vía `findDuplicate`; apertura desde la búsqueda global con `focusBookmarkId` aplicado durante el render, igual que Lists/Notes) + bookmarks.css, BookmarkModal (edición: título, descripción, etiquetas; `useSwipeToDismiss`), BookmarkIcons (SVG inline), useBookmarks (`bookmark-created/updated/deleted/error`, se refresca desde `access-granted`; expone `error`/`clearError`), bookmarkUtils.ts (lógica pura: normalizeUrl, urlKey/findDuplicate, getDomain, faviconUrl, domainHue, filterBookmarks, countFilters, collectTags, cleanTag) + bookmarkUtils.test.ts. **El módulo puro NO se llama `bookmarks.ts`**: en Windows (sistema de ficheros sin distinción de mayúsculas) chocaba con `Bookmarks.tsx` y TypeScript fallaba con TS1149
+  search/       GlobalSearch (modal de búsqueda global — input + resultados agrupados por Eventos/Notas/Listas/Marcadores, Escape cierra) + globalSearch.css, search.ts (searchAll: filtro de texto puro, sin red, sobre events/notes/listItems/bookmarks ya cargados; insensible a mayúsculas, tope `perGroupLimit` por sección) + search.test.ts
 socket/
   client.ts             el io() singleton (reconnection explícita, timeout 8s) + rememberRoom/forgetRoom (en memoria + persistidas en `localStorage`, ver getStoredRoom) + buildJoinPayload (payload único de join-room: credenciales + editor_name/editor_color + device_id, identidad leída fresca en cada llamada) + re-join al reconectar con ese mismo payload
   queue.ts              cola de escrituras offline: emitWrite / emitWriteAck encolan si no hay conexión y vacían en orden al recibir `access-granted`
   usePendingWrites.ts   hook → nº de escrituras encoladas
-  SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected')
+  SocketProvider.tsx    context: estado de conexión ('connecting'|'connected'|'disconnected'). El estado vive en un **store a nivel de módulo** (listeners registrados al importar el archivo, `useSyncExternalStore`), no en `useState`+`useEffect`: con el efecto, React se suscribe después de pintar y si el servidor conectaba en ese hueco el evento `connect` se perdía — el estado quedaba en 'connecting' y a los 3s `ConnectionBanner` mostraba "Sin conexión" estando conectado (reproducido en ~50% de cargas con servidor local; 0/8 tras el cambio)
   useConnection.ts      hook → estado de conexión
   usePresence.ts        hook → PresencePerson[] (todos los miembros, conectados primero); pide `get-presence` al montar
   ConnectionBanner.tsx  barra fija "Sin conexión…" tras 3s de gracia (+ "N cambios sin sincronizar" si hay cola), montada en App
@@ -468,7 +520,7 @@ db/
   migrations.js       runMigrations() — addColumnIfMissing(table, column, definition): ALTER TABLE ADD COLUMN si PRAGMA table_info dice que falta (idempotente); hoy añade note.pinned
   migrations.test.js  unit: crea a mano la tabla `note` con el esquema ANTERIOR (sin la columna nueva, simulando una calendario.db real de antes de este cambio) y comprueba que runMigrations() la añade con un valor por defecto sano; idempotencia
   index.js            initDb() = createSchema + runMigrations; closeDb() = wal_checkpoint(TRUNCATE) + db.close(); barrel de las queries
-  rooms.js / events.js / lists.js / notes.js / push.js / members.js   queries por dominio (rooms.js: createRoom/verifyRoomAccess/updateRoomTimezone; events.js: updateEvent con concurrencia optimista; members.js: upsertRoomMember/touchRoomMember/getRoomMembers sobre `room_member`)
+  rooms.js / events.js / lists.js / notes.js / push.js / members.js / bookmarks.js   queries por dominio (rooms.js: createRoom/verifyRoomAccess/updateRoomTimezone; events.js: updateEvent con concurrencia optimista; members.js: upsertRoomMember/touchRoomMember/getRoomMembers sobre `room_member`; bookmarks.js: create/update parcial/applyPreview/failStalePreviews/delete/restore + sanitizeTags/placeholderTitle)
 auth/
   password.js         hashPassword / verifyPassword (scrypt)
 services/
@@ -480,6 +532,8 @@ services/
   cleanup.test.js     retención: protege salas con actividad reciente en cualquier tabla, borra inactivas, conserva instancias futuras de una serie vieja
   backup.js           runBackup (VACUUM INTO + poda a 14 copias) + startBackupScheduler (setInterval 24h)
   backup.test.js      backup válido y abrible; poda a 14 con 15 presentes
+  linkPreview.js      fetchLinkPreview (título/descripción/imagen Open Graph de una URL) con defensas anti-SSRF — ver "Marcadores y vista previa de enlaces"; también isPrivateAddress, parseHttpUrl y parsePreview, puros y exportados para los tests
+  linkPreview.test.js unit: rangos privados IPv4/IPv6, parseo OG (entidades, imagen relativa, esquema peligroso), y contra un servidor local: gzip, charset, redirects, bucle, imagen/PDF, HTTP de error, plazo, tope de tamaño, y que localhost/IPs privadas/redirects hacia la red interna NO llegan a conectar
   undo.js             stash/pop — tombstones de borrados en memoria (ventana 12s)
 http/
   app.js              createApp() — express + cors + json (límite 256kb, alineado con MAX.noteBody) + health
@@ -492,7 +546,7 @@ sockets/
   validate.js         MAX (longitudes) + MIN_PASSWORD, str/optStr/isObject/isDateish, isValidEventInput, isValidPushSubscription
   presence.js         `presence`/`get-presence`/`update-identity` con identidad (room → Map<socketId, {name, color, deviceId}>, poblado por setPresence() en join-room —que además hace upsert en `room_member` si el device_id es válido— y refrescado en vivo por update-identity) + handler `disconnecting` (touch de `last_seen_at` cuando se va el último socket de ese dispositivo) + `buildPeople` puro (fusiona sockets vivos + miembros persistidos: uno por dispositivo, conectados primero)
   undo.js             `undo-delete` → restaura desde la ventana de `services/undo.js`
-  rooms.js / events.js / lists.js / notes.js / push.js   un registrador de handlers por dominio
+  rooms.js / events.js / lists.js / notes.js / bookmarks.js / push.js   un registrador de handlers por dominio (bookmarks.js: `loadPreview` en segundo plano + `withPreviewSlot`, tope de 4 descargas a la vez)
 test/
   setup.js            --import de `pnpm test`: env de prueba + DB_PATH y BACKUP_DIR temporales por proceso (se borran al salir)
   helpers.js          startTestServer() (compone app/io/handlers sin index.js ni webpush), connect(), once()
@@ -500,6 +554,7 @@ test/
   notes.test.js       concurrencia optimista de notas: ok / conflict / dos editores / LWW sin updated_at / not-found
   series.test.js      alcances de edición/borrado de series: single / future / all + compat sin scope
   presence.test.js    presence con nombre/color al entrar y salir; identidad ausente/inválida cae a valores por defecto; update-identity refresca en vivo (uno mismo y el resto) y exige estar autenticado en la sala; miembros: el desconectado sigue en la lista con `last_seen_at`, varias pestañas del mismo dispositivo cuentan una vez, renombrarse no deja fantasma, sin device_id válido no se persiste, orden de `buildPeople`
+  bookmarks.test.js   marcadores: alta pending→failed (IP privada, sin red real), URL sin esquema/inválida, aislamiento entre salas, edición parcial y saneado de etiquetas/tipos, refresh, borrar+undo, rate limit; capa de datos: applyPreview no pisa lo escrito a mano, failStalePreviews, cascada
   undo.test.js        undo de evento/serie/lista(+ítems)/ítems completados vaciados de golpe/nota; token caducado; undo de otra sala rechazado
   event-concurrency.test.js   concurrencia optimista de eventos: ok / conflict (event-conflict) / dos editores / LWW sin expected_updated_at / not-found
   attribution.test.js  last_editor_name/color en create/update de eventos (incl. series) y notas; se restaura correctamente con undo
@@ -512,7 +567,7 @@ test/
 - **Tests del cliente** (Vitest): `cd client && pnpm test`. Cubren solo lógica
   pura (sin componentes): `dateUtils.test.ts`, `ics.test.ts`,
   `password-strength.test.ts`, `color.test.ts`, `relativeTime.test.ts`,
-  `checklist.test.ts`, `search.test.ts`.
+  `checklist.test.ts`, `search.test.ts`, `bookmarkUtils.test.ts`.
   `vite.config.ts` declara `test.environment: 'node'` (no hace falta DOM para
   estos) — la excepción es `identity.test.ts`, que necesita `localStorage`
   real y por eso fija `// @vitest-environment jsdom` en su propia cabecera.
@@ -521,7 +576,7 @@ test/
   excepción se loguea (`logger.error('socket:<event>', err)`) y emite su evento de
   error al cliente (`event-error`/`list-error`/`note-error`/`room-error`/`access-denied`/`push-error`),
   nunca tumba el proceso. Nada de `console.*` en el server salvo el mensaje fatal de `env.js`.
-- **Autorización por sala:** los 14 handlers de escritura/lectura de datos van por
+- **Autorización por sala:** los 18 handlers de escritura/lectura de datos van por
   `safeAuthedOn` → un socket que no hizo `join-room`/`create-room` para esa sala no
   puede actuar sobre ella (rechazo silencioso). `update-room-style` lo comprueba a
   mano (su clave de sala es `name`). `unsubscribe-push` exige solo estar autenticado

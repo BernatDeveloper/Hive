@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './auth.css'
 import { socket, rememberRoom, forgetRoom, awaitAuthResponse, buildJoinPayload } from '../../socket'
-import type { Room, Event, List, ListItem, Note } from '../../types'
+import type { Room, Event, List, ListItem, Note, Bookmark } from '../../types'
 import HomeScreen from './HomeScreen'
 import CreateRoomForm from './CreateRoomForm'
 import JoinRoomForm from './JoinRoomForm'
@@ -10,7 +10,7 @@ import { hasIdentity, setGlobalIdentity } from '../identity/identity'
 import type { Identity } from '../identity/identity'
 
 interface Props {
-  onEnter: (room: Room, events: Event[], lists: List[], listItems: ListItem[], notes: Note[]) => void
+  onEnter: (room: Room, events: Event[], lists: List[], listItems: ListItem[], notes: Note[], bookmarks: Bookmark[]) => void
   notice?: string | null
 }
 
@@ -22,6 +22,7 @@ interface AccessGranted {
   lists: List[]
   listItems: ListItem[]
   notes: Note[]
+  bookmarks: Bookmark[]
 }
 
 export default function RoomEntry({ onEnter, notice }: Props) {
@@ -60,7 +61,7 @@ export default function RoomEntry({ onEnter, notice }: Props) {
 
   function enter(name: string, password: string, payload: AccessGranted) {
     rememberRoom(name, password)
-    onEnter(payload.room, payload.events, payload.lists, payload.listItems, payload.notes)
+    onEnter(payload.room, payload.events, payload.lists, payload.listItems, payload.notes, payload.bookmarks)
   }
 
   function handleCreate(name: string, password: string) {

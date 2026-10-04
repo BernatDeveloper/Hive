@@ -1,4 +1,4 @@
-import { restoreEvents, restoreList, restoreListItem, restoreNote } from '../db/index.js'
+import { restoreEvents, restoreList, restoreListItem, restoreNote, restoreBookmark } from '../db/index.js'
 import { pop } from '../services/undo.js'
 import { broadcast } from './helpers.js'
 import { safeAuthedOn } from './handler.js'
@@ -29,6 +29,8 @@ export function registerUndoHandlers(io, socket) {
       }
     } else if (entry.kind === 'note') {
       broadcast(io, room, 'note-created', restoreNote(entry.note))
+    } else if (entry.kind === 'bookmark') {
+      broadcast(io, room, 'bookmark-created', restoreBookmark(entry.bookmark))
     }
 
     ack?.({ ok: true })

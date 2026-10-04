@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './dashboard.css'
 import { forgetRoom, usePresence } from '../../socket'
-import type { Room, Event, List, ListItem, Note } from '../../types'
+import type { Room, Event, List, ListItem, Note, Bookmark } from '../../types'
 import { readableTextColor } from '../../shared/color'
 import { formatRelativeTime } from '../../shared/relativeTime'
 import ModuleGrid from './ModuleGrid'
@@ -9,12 +9,14 @@ import type { ModuleId } from './ModuleGrid'
 import Calendar from '../calendar/Calendar'
 import Lists from '../lists/Lists'
 import Notes from '../notes/Notes'
+import Bookmarks from '../bookmarks/Bookmarks'
 import RoomSettings from '../settings/RoomSettings'
 import GlobalSearch from '../search/GlobalSearch'
 import { useRoomStyle } from '../settings/useRoomStyle'
 import { useEvents } from '../calendar/useEvents'
 import { useLists } from '../lists/useLists'
 import { useNotes } from '../notes/useNotes'
+import { useBookmarks } from '../bookmarks/useBookmarks'
 import { useRoomLost } from './useRoomLost'
 import { useUndo } from './useUndo'
 import UndoToast from './UndoToast'
@@ -25,6 +27,7 @@ interface Props {
   initialLists: List[]
   initialListItems: ListItem[]
   initialNotes: Note[]
+  initialBookmarks: Bookmark[]
   onLeave: (message?: string) => void
   onUpdateRoom: (room: Room) => void
 }
@@ -53,7 +56,7 @@ const IconSearch = () => (
   </svg>
 )
 
-export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, onLeave, onUpdateRoom }: Props) {
+export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, initialBookmarks, onLeave, onUpdateRoom }: Props) {
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -65,6 +68,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const [calendarJump, setCalendarJump] = useState<Event | null>(null)
   const [notesFocusId, setNotesFocusId] = useState<string | null>(null)
   const [listsFocusId, setListsFocusId] = useState<string | null>(null)
+  const [bookmarksFocusId, setBookmarksFocusId] = useState<string | null>(null)
 
   const { colors, cssVars, roomWithColors } = useRoomStyle(room, onUpdateRoom)
   const presence = usePresence()
@@ -72,6 +76,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   const cal = useEvents(room.name, initialEvents)
   const lists = useLists(room.name, initialLists, initialListItems)
   const notes = useNotes(room.name, initialNotes)
+  const bookmarks = useBookmarks(room.name, initialBookmarks)
   const undo = useUndo(room.name)
   useRoomLost(onLeave)
 
@@ -86,6 +91,10 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
   function openSearchList(listId: string) {
     setActiveModule('lists')
     setListsFocusId(listId)
+  }
+  function openSearchBookmark(bookmarkId: string) {
+    setActiveModule('bookmarks')
+    setBookmarksFocusId(bookmarkId)
   }
 
   // Cierra el desplegable de presencia al tocar fuera o al pulsar Escape.
@@ -229,6 +238,19 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
             onFocusHandled={() => setNotesFocusId(null)}
           />
         )}
+        {activeModule === 'bookmarks' && (
+          <Bookmarks
+            bookmarks={bookmarks.bookmarks}
+            error={bookmarks.error}
+            onClearError={bookmarks.clearError}
+            onCreate={bookmarks.createBookmark}
+            onUpdate={bookmarks.updateBookmark}
+            onRefreshPreview={bookmarks.refreshPreview}
+            onDelete={(id) => { bookmarks.deleteBookmark(id).then(undo.offer) }}
+            focusBookmarkId={bookmarksFocusId}
+            onFocusHandled={() => setBookmarksFocusId(null)}
+          />
+        )}
       </main>
 
       {undo.toast && (
@@ -245,9 +267,11 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
           notes={notes.notes}
           lists={lists.lists}
           listItems={lists.listItems}
+          bookmarks={bookmarks.bookmarks}
           onOpenEvent={openSearchEvent}
           onOpenNote={openSearchNote}
           onOpenList={openSearchList}
+          onOpenBookmark={openSearchBookmark}
           onClose={() => setShowSearch(false)}
         />
       )}

@@ -51,7 +51,13 @@
   outline-offset: 2px;
 }
 
-.module-card--upcoming { opacity: 0.4; cursor: default; }
+.module-card--upcoming {
+  opacity: 0.5;
+  cursor: default;
+  border-style: dashed;
+  box-shadow: none;
+  user-select: none;
+}
 
 .module-icon {
   width: 40px;

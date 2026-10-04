@@ -5,7 +5,7 @@ import RoomEntry from './features/auth/RoomEntry'
 import Dashboard from './features/dashboard/Dashboard'
 import { ConnectionBanner, socket, rememberRoom, forgetRoom, getStoredRoom, awaitAuthResponse, buildJoinPayload } from './socket'
 import { useServiceWorkerUpdate } from './pwa'
-import type { Room, Event, List, ListItem, Note } from './types'
+import type { Room, Event, List, ListItem, Note, Bookmark } from './types'
 
 interface AccessGranted {
   room: Room
@@ -13,6 +13,7 @@ interface AccessGranted {
   lists: List[]
   listItems: ListItem[]
   notes: Note[]
+  bookmarks: Bookmark[]
 }
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
   const [initialLists, setInitialLists] = useState<List[]>([])
   const [initialListItems, setInitialListItems] = useState<ListItem[]>([])
   const [initialNotes, setInitialNotes] = useState<Note[]>([])
+  const [initialBookmarks, setInitialBookmarks] = useState<Bookmark[]>([])
   const [entryNotice, setEntryNotice] = useState<string | null>(null)
   // Sala guardada de una visita anterior (leída UNA sola vez, al montar) — si
   // existe, reintenta entrar sola antes de mostrar la pantalla de inicio, así
@@ -49,6 +51,7 @@ export default function App() {
         setInitialLists(p.lists)
         setInitialListItems(p.listItems)
         setInitialNotes(p.notes)
+        setInitialBookmarks(p.bookmarks)
         setCheckingStoredRoom(false)
       },
       'access-denied': (msg) => {
@@ -88,13 +91,14 @@ export default function App() {
       {!room ? (
         <RoomEntry
           notice={entryNotice}
-          onEnter={(r, ev, lists, listItems, notes) => {
+          onEnter={(r, ev, lists, listItems, notes, bookmarks) => {
             setEntryNotice(null)
             setRoom(r)
             setInitialEvents(ev)
             setInitialLists(lists)
             setInitialListItems(listItems)
             setInitialNotes(notes)
+            setInitialBookmarks(bookmarks)
           }}
         />
       ) : (
@@ -104,6 +108,7 @@ export default function App() {
           initialLists={initialLists}
           initialListItems={initialListItems}
           initialNotes={initialNotes}
+          initialBookmarks={initialBookmarks}
           onLeave={handleLeave}
           onUpdateRoom={setRoom}
         />

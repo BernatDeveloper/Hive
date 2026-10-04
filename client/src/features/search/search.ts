@@ -1,9 +1,9 @@
 // Búsqueda global: coincide por texto en eventos, notas e ítems de lista ya
 // cargados en el cliente (sin red — los tres módulos ya tienen todo en
 // memoria vía sus hooks). Puro — sin dependencias de React.
-import type { Event, List, ListItem, Note } from '../../types'
+import type { Bookmark, Event, List, ListItem, Note } from '../../types'
 
-export type SearchResultType = 'event' | 'note' | 'list-item'
+export type SearchResultType = 'event' | 'note' | 'list-item' | 'bookmark'
 
 export interface SearchResult {
   type: SearchResultType
@@ -13,6 +13,7 @@ export interface SearchResult {
   eventRef?: Event
   noteId?: string
   listId?: string
+  bookmarkId?: string
 }
 
 export interface SearchData {
@@ -20,17 +21,20 @@ export interface SearchData {
   notes: Note[]
   lists: List[]
   listItems: ListItem[]
+  // Opcional: quien no tenga marcadores no tiene por qué pasarlo.
+  bookmarks?: Bookmark[]
 }
 
 export interface SearchResults {
   events: SearchResult[]
   notes: SearchResult[]
   listItems: SearchResult[]
+  bookmarks: SearchResult[]
 }
 
 export function searchAll(query: string, data: SearchData, perGroupLimit = 6): SearchResults {
   const q = query.trim().toLowerCase()
-  if (!q) return { events: [], notes: [], listItems: [] }
+  if (!q) return { events: [], notes: [], listItems: [], bookmarks: [] }
 
   const events = data.events
     .filter(e => e.title.toLowerCase().includes(q) || e.description.toLowerCase().includes(q))
@@ -60,5 +64,20 @@ export function searchAll(query: string, data: SearchData, perGroupLimit = 6): S
       listId: it.list_id,
     }))
 
-  return { events, notes, listItems }
+  const bookmarks = (data.bookmarks ?? [])
+    .filter(b =>
+      b.title.toLowerCase().includes(q)
+      || b.description.toLowerCase().includes(q)
+      || b.url.toLowerCase().includes(q)
+      || b.tags.some(t => t.includes(q)))
+    .slice(0, perGroupLimit)
+    .map(b => ({
+      type: 'bookmark' as const,
+      id: b.id,
+      title: b.title,
+      subtitle: b.url.replace(/^https?:\/\/(www\.)?/, ''),
+      bookmarkId: b.id,
+    }))
+
+  return { events, notes, listItems, bookmarks }
 }

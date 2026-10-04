@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import '../../shared/modal.css'
 import './globalSearch.css'
-import type { Event, List, ListItem, Note } from '../../types'
+import type { Bookmark, Event, List, ListItem, Note } from '../../types'
 import { searchAll } from './search'
 import type { SearchResult } from './search'
 
@@ -10,9 +10,11 @@ interface Props {
   notes: Note[]
   lists: List[]
   listItems: ListItem[]
+  bookmarks: Bookmark[]
   onOpenEvent: (event: Event) => void
   onOpenNote: (noteId: string) => void
   onOpenList: (listId: string) => void
+  onOpenBookmark: (bookmarkId: string) => void
   onClose: () => void
 }
 
@@ -39,9 +41,9 @@ function ResultGroup({ label, results, onSelect }: { label: string; results: Sea
 }
 
 // Búsqueda global sobre lo que ya está cargado en el cliente (eventos, notas,
-// ítems de lista) — sin red. Seleccionar un resultado navega al módulo que le
+// ítems de lista, marcadores) — sin red. Seleccionar un resultado navega al módulo que le
 // corresponde y lo abre (ver Dashboard: onOpenEvent/onOpenNote/onOpenList).
-export default function GlobalSearch({ events, notes, lists, listItems, onOpenEvent, onOpenNote, onOpenList, onClose }: Props) {
+export default function GlobalSearch({ events, notes, lists, listItems, bookmarks, onOpenEvent, onOpenNote, onOpenList, onOpenBookmark, onClose }: Props) {
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -53,12 +55,13 @@ export default function GlobalSearch({ events, notes, lists, listItems, onOpenEv
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
-  const results = searchAll(query, { events, notes, lists, listItems })
-  const total = results.events.length + results.notes.length + results.listItems.length
+  const results = searchAll(query, { events, notes, lists, listItems, bookmarks })
+  const total = results.events.length + results.notes.length + results.listItems.length + results.bookmarks.length
 
   function selectEvent(r: SearchResult) { if (r.eventRef) { onOpenEvent(r.eventRef); onClose() } }
   function selectNote(r: SearchResult) { if (r.noteId) { onOpenNote(r.noteId); onClose() } }
   function selectListItem(r: SearchResult) { if (r.listId) { onOpenList(r.listId); onClose() } }
+  function selectBookmark(r: SearchResult) { if (r.bookmarkId) { onOpenBookmark(r.bookmarkId); onClose() } }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -70,7 +73,7 @@ export default function GlobalSearch({ events, notes, lists, listItems, onOpenEv
             className="global-search-input"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Buscar eventos, notas, ítems de lista…"
+            placeholder="Buscar eventos, notas, listas, marcadores…"
             aria-label="Búsqueda global"
           />
           <button type="button" className="btn-ghost btn-icon" onClick={onClose} aria-label="Cerrar búsqueda">✕</button>
@@ -78,7 +81,7 @@ export default function GlobalSearch({ events, notes, lists, listItems, onOpenEv
 
         <div className="global-search-results">
           {query.trim() === '' && (
-            <p className="global-search-empty">Escribe para buscar en eventos, notas y listas</p>
+            <p className="global-search-empty">Escribe para buscar en eventos, notas, listas y marcadores</p>
           )}
           {query.trim() !== '' && total === 0 && (
             <p className="global-search-empty">Sin resultados para «{query.trim()}»</p>
@@ -87,6 +90,7 @@ export default function GlobalSearch({ events, notes, lists, listItems, onOpenEv
           <ResultGroup label="Eventos" results={results.events} onSelect={selectEvent} />
           <ResultGroup label="Notas" results={results.notes} onSelect={selectNote} />
           <ResultGroup label="Listas" results={results.listItems} onSelect={selectListItem} />
+          <ResultGroup label="Marcadores" results={results.bookmarks} onSelect={selectBookmark} />
         </div>
       </div>
     </div>

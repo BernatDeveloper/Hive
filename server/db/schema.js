@@ -82,6 +82,30 @@ export function createSchema() {
     )
   `)
 
+  // Marcadores: enlaces guardados (tutoriales, productos, artículos…). El
+  // título/descripción/imagen se rellenan en segundo plano desde la propia
+  // página (services/linkPreview.js); `preview_status` dice en qué punto está
+  // ('pending' → 'done' | 'failed'). `tags` es un array JSON de strings.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bookmark (
+      id             TEXT PRIMARY KEY,
+      room           TEXT NOT NULL REFERENCES room(name) ON DELETE CASCADE,
+      url            TEXT NOT NULL,
+      title          TEXT NOT NULL,
+      description    TEXT NOT NULL DEFAULT '',
+      image          TEXT,
+      site_name      TEXT,
+      tags           TEXT NOT NULL DEFAULT '[]',
+      favorite       INTEGER NOT NULL DEFAULT 0,
+      seen           INTEGER NOT NULL DEFAULT 0,
+      preview_status TEXT NOT NULL DEFAULT 'pending',
+      added_by_name  TEXT,
+      added_by_color TEXT,
+      created_at     TEXT NOT NULL,
+      updated_at     TEXT NOT NULL
+    )
+  `)
+
   // Miembros de la sala: cada dispositivo (identidad ligera, sin cuentas) que
   // ha entrado alguna vez. La presencia en vivo sigue en memoria
   // (sockets/presence.js); esto es lo que permite listar también a quien no
@@ -115,6 +139,7 @@ export function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_list_item_room     ON list_item(room);
     CREATE INDEX IF NOT EXISTS idx_list_item_list     ON list_item(list_id);
     CREATE INDEX IF NOT EXISTS idx_note_room          ON note(room);
+    CREATE INDEX IF NOT EXISTS idx_bookmark_room      ON bookmark(room);
     CREATE INDEX IF NOT EXISTS idx_push_sub_room      ON push_subscription(room);
   `)
 }

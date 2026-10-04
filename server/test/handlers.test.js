@@ -62,7 +62,7 @@ test('join-room: contraseña correcta vs incorrecta', async () => {
   const granted = await once(s, 'access-granted')
   assert.deepEqual(
     Object.keys(granted).sort(),
-    ['events', 'lists', 'listItems', 'notes', 'room'].sort(),
+    ['events', 'lists', 'listItems', 'notes', 'bookmarks', 'room'].sort(),
   )
 })
 

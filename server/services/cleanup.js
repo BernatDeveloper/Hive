@@ -4,7 +4,7 @@ import { logger } from '../lib/logger.js'
 const ROOM_INACTIVITY_YEARS = 2
 const EVENT_MAX_AGE_YEARS = 3
 
-// Borra salas sin actividad (evento / ítem de lista / nota) en más de 2 años.
+// Borra salas sin actividad (evento / ítem de lista / nota / marcador) en más de 2 años.
 // TODAS las señales de actividad deben ser anteriores al umbral: usar
 // COALESCE(MAX(x), '') por tabla (no COALESCE(a, b, c), que devuelve el primer
 // valor no nulo y podría quedarse con una señal vieja mientras ignora una
@@ -12,16 +12,15 @@ const EVENT_MAX_AGE_YEARS = 3
 // cadena vacía ordena antes que cualquier fecha, así que una tabla sin filas
 // para esa sala no la protege de las demás condiciones.
 export function cleanInactiveRooms() {
+  // Subconsultas escalares en vez de un LEFT JOIN por tabla: encadenar joins
+  // multiplica las filas (eventos × ítems × notas × marcadores por sala).
   const inactiveRooms = db.prepare(`
     SELECT r.name FROM room r
-    LEFT JOIN event e ON e.room = r.name
-    LEFT JOIN list_item li ON li.room = r.name
-    LEFT JOIN note n ON n.room = r.name
-    GROUP BY r.name
-    HAVING COALESCE(MAX(e.updated_at),  '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
-       AND COALESCE(MAX(li.updated_at), '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
-       AND COALESCE(MAX(n.updated_at),  '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
-       AND r.created_at                     < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
+    WHERE COALESCE((SELECT MAX(updated_at) FROM event     WHERE room = r.name), '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
+      AND COALESCE((SELECT MAX(updated_at) FROM list_item WHERE room = r.name), '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
+      AND COALESCE((SELECT MAX(updated_at) FROM note      WHERE room = r.name), '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
+      AND COALESCE((SELECT MAX(updated_at) FROM bookmark  WHERE room = r.name), '') < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
+      AND r.created_at                                                               < datetime('now', '-${ROOM_INACTIVITY_YEARS} years')
   `).all().map(r => r.name)
 
   if (inactiveRooms.length === 0) return

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import './module-grid.css'
 
-type ModuleId = 'calendar' | 'lists' | 'notes'
+type ModuleId = 'calendar' | 'lists' | 'notes' | 'bookmarks'
 
 interface Module {
   id: ModuleId
@@ -42,13 +42,32 @@ const IconFileText = () => (
   </svg>
 )
 
+const IconBookmark = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+
+const IconWallet = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20 12V8a2 2 0 0 0-2-2H5a2 2 0 0 1 0-4h12"/>
+    <path d="M3 5v14a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-4"/>
+    <path d="M21 12h-4a2 2 0 0 0 0 4h4z"/>
+  </svg>
+)
+
 const MODULES: Module[] = [
   { id: 'calendar', icon: <IconCalendar />, title: 'Calendario', description: 'Eventos compartidos en tiempo real' },
   { id: 'lists', icon: <IconCheckSquare />, title: 'Listas', description: 'To-do, compra, planificación…' },
   { id: 'notes', icon: <IconFileText />, title: 'Notas', description: 'Bloc compartido de notas' },
+  { id: 'bookmarks', icon: <IconBookmark />, title: 'Marcadores', description: 'Tutoriales, productos, artículos…' },
 ]
 
-const UPCOMING: UpcomingModule[] = []
+// Módulos anunciados pero aún sin construir: se muestran como tarjeta
+// desactivada con la etiqueta "Próximamente" (no son botones, no navegan).
+const UPCOMING: UpcomingModule[] = [
+  { icon: <IconWallet />, title: 'Gastos', description: 'Control del dinero compartido' },
+]
 
 interface Props {
   onSelect: (id: ModuleId) => void
@@ -71,7 +90,7 @@ export default function ModuleGrid({ onSelect }: Props) {
           </button>
         ))}
         {UPCOMING.map(m => (
-          <div key={m.title} className="module-card module-card--upcoming">
+          <div key={m.title} className="module-card module-card--upcoming" aria-disabled="true">
             <span className="module-icon">{m.icon}</span>
             <span className="module-title">{m.title}</span>
             <span className="module-desc">{m.description}</span>

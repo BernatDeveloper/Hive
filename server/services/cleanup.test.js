@@ -41,6 +41,19 @@ test('cleanInactiveRooms: no usa COALESCE(a,b,c) — una nota reciente protege u
   assert.ok(roomExists(room), 'una sala con actividad reciente en notas no debería borrarse')
 })
 
+test('cleanInactiveRooms: un marcador reciente protege una sala con el resto de actividad vieja', () => {
+  const room = 'inact-' + randomUUID()
+  insertRoom(room, isoYearsAgo(5))
+  insertEvent(room, { start: '2020-01-01', end: '2020-01-01', updatedAt: isoYearsAgo(5) })
+  const now = new Date().toISOString()
+  db.prepare(`INSERT INTO bookmark (id, room, url, title, created_at, updated_at) VALUES (?, ?, 'https://ejemplo.com', 'B', ?, ?)`)
+    .run(randomUUID(), room, now, now)
+
+  cleanInactiveRooms()
+
+  assert.ok(roomExists(room), 'una sala con un marcador reciente no debería borrarse')
+})
+
 test('cleanInactiveRooms: sala sin ninguna actividad en más de 2 años se borra', () => {
   const room = 'inact-' + randomUUID()
   insertRoom(room, isoYearsAgo(3))

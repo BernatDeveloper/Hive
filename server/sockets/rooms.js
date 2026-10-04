@@ -1,6 +1,6 @@
 import {
   createRoom, verifyRoomAccess, updateRoomStyle, updateRoomTimezone,
-  getEvents, getLists, getListItems, getNotes,
+  getEvents, getLists, getListItems, getNotes, getBookmarks,
 } from '../db/index.js'
 import { config } from '../config/env.js'
 import { logger } from '../lib/logger.js'
@@ -60,6 +60,7 @@ export function registerRoomHandlers(io, socket) {
       lists: getLists(name),
       listItems: getListItems(name),
       notes: getNotes(name),
+      bookmarks: getBookmarks(name),
     })
     emitPresence(io, name) // el socket ya está en la room → cuenta correcta
   })

@@ -1,0 +1,472 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import './bookmarks.css'
+import type { Bookmark } from '../../types'
+import { formatRelativeTime } from '../../shared/relativeTime'
+import { readableTextColor } from '../../shared/color'
+import {
+  collectTags, countFilters, domainHue, faviconUrl, filterBookmarks, findDuplicate, getDomain, normalizeUrl,
+} from './bookmarkUtils'
+import type { BookmarkFilter } from './bookmarkUtils'
+import type { BookmarkPatch } from './useBookmarks'
+import BookmarkModal from './BookmarkModal'
+import {
+  IconBookmarkPlaceholder, IconCheck, IconCheckCircle, IconCopy, IconEdit, IconExternal, IconLink,
+  IconRefresh, IconSearch, IconStar, IconTrash, IconX,
+} from './BookmarkIcons'
+
+interface Props {
+  bookmarks: Bookmark[]
+  error: string | null
+  onClearError: () => void
+  onCreate: (url: string) => void
+  onUpdate: (id: string, patch: BookmarkPatch) => void
+  onRefreshPreview: (id: string) => void
+  onDelete: (id: string) => void
+  // Abrir un marcador desde fuera (búsqueda global): limpia filtros, se
+  // desplaza hasta la tarjeta y la resalta; `onFocusHandled` limpia el pedido.
+  focusBookmarkId?: string | null
+  onFocusHandled?: () => void
+}
+
+const FILTERS: { id: BookmarkFilter; label: string }[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'favorites', label: 'Favoritos' },
+  { id: 'pending', label: 'Pendientes' },
+]
+
+const HIGHLIGHT_MS = 1800
+
+// Copia al portapapeles. `navigator.clipboard` no existe fuera de un contexto
+// seguro (p. ej. probando desde el móvil por http://<ip-local>), así que cae a
+// un textarea temporal + execCommand.
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      const ok = document.execCommand('copy')
+      ta.remove()
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
+
+interface CardProps {
+  bookmark: Bookmark
+  index: number
+  highlighted: boolean
+  activeTag: string | null
+  onToggleFavorite: () => void
+  onToggleSeen: () => void
+  onEdit: () => void
+  onDelete: () => void
+  onRefreshPreview: () => void
+  onTagClick: (tag: string) => void
+}
+
+function BookmarkCard({
+  bookmark: b, index, highlighted, activeTag,
+  onToggleFavorite, onToggleSeen, onEdit, onDelete, onRefreshPreview, onTagClick,
+}: CardProps) {
+  // Guardamos QUÉ imagen/favicon falló (no un booleano): si el servidor
+  // refresca la vista previa y llega otra URL, se vuelve a intentar sola.
+  const [failedImage, setFailedImage] = useState<string | null>(null)
+  const [failedFavicon, setFailedFavicon] = useState(false)
+  const [loadedImage, setLoadedImage] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setCopied(false), 1500)
+    return () => clearTimeout(t)
+  }, [copied])
+
+  const domain = getDomain(b.url)
+  const favicon = faviconUrl(b.url)
+  const pending = b.preview_status === 'pending'
+  const showImage = !!b.image && failedImage !== b.image
+  const hue = domainHue(domain)
+
+  async function handleCopy() {
+    if (await copyText(b.url)) setCopied(true)
+  }
+
+  return (
+    <article
+      className={[
+        'bookmark-card',
+        b.seen ? 'bookmark-card--seen' : '',
+        pending ? 'bookmark-card--pending' : '',
+        highlighted ? 'bookmark-card--highlight' : '',
+      ].filter(Boolean).join(' ')}
+      style={{ '--i': Math.min(index, 14) } as React.CSSProperties}
+      data-bookmark-id={b.id}
+    >
+      <a className="bookmark-media" href={b.url} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden="true">
+        {showImage ? (
+          <img
+            src={b.image!}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className={loadedImage === b.image ? 'is-loaded' : ''}
+            onLoad={() => setLoadedImage(b.image)}
+            onError={() => setFailedImage(b.image)}
+          />
+        ) : (
+          <span
+            className="bookmark-media-fallback"
+            style={{ background: `linear-gradient(135deg, hsl(${hue} 70% 62%), hsl(${(hue + 45) % 360} 70% 50%))` }}
+          >
+            {domain.charAt(0)}
+          </span>
+        )}
+        {pending && <span className="bookmark-shimmer" />}
+      </a>
+
+      <div className="bookmark-body">
+        <div className="bookmark-site">
+          {favicon && !failedFavicon ? (
+            <img
+              className="bookmark-favicon"
+              src={favicon}
+              alt=""
+              width={14}
+              height={14}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setFailedFavicon(true)}
+            />
+          ) : (
+            <span className="bookmark-favicon bookmark-favicon--fallback"><IconLink size={11} /></span>
+          )}
+          <span className="bookmark-site-name">{b.site_name || domain}</span>
+        </div>
+
+        <a className="bookmark-title" href={b.url} target="_blank" rel="noopener noreferrer">{b.title}</a>
+
+        {pending && !b.description ? (
+          <div className="bookmark-skeleton-lines" aria-label="Cargando vista previa">
+            <span /><span />
+          </div>
+        ) : (
+          b.description && <p className="bookmark-desc">{b.description}</p>
+        )}
+
+        {b.preview_status === 'failed' && (
+          <button type="button" className="bookmark-retry" onClick={onRefreshPreview}>
+            <IconRefresh size={12} /> Sin vista previa · Reintentar
+          </button>
+        )}
+
+        {b.tags.length > 0 && (
+          <div className="bookmark-tags">
+            {b.tags.map(tag => (
+              <button
+                key={tag}
+                type="button"
+                className={`bookmark-tag${activeTag === tag ? ' bookmark-tag--active' : ''}`}
+                onClick={() => onTagClick(tag)}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <p className="bookmark-meta">
+          {b.added_by_name && (
+            <span
+              className="bookmark-meta-avatar"
+              style={b.added_by_color ? { background: b.added_by_color, color: readableTextColor(b.added_by_color) } : undefined}
+              aria-hidden="true"
+            >
+              {b.added_by_name.charAt(0)}
+            </span>
+          )}
+          <span>{b.added_by_name ? `${b.added_by_name} · ` : ''}{formatRelativeTime(b.created_at)}</span>
+        </p>
+      </div>
+
+      <footer className="bookmark-footer">
+        <div className="bookmark-actions">
+          <button
+            type="button"
+            className={`bookmark-action bookmark-action--fav${b.favorite ? ' is-on' : ''}`}
+            onClick={onToggleFavorite}
+            aria-pressed={b.favorite}
+            aria-label={b.favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+            title={b.favorite ? 'Quitar de favoritos' : 'Favorito'}
+          >
+            <IconStar filled={b.favorite} />
+          </button>
+          <button
+            type="button"
+            className={`bookmark-action bookmark-action--seen${b.seen ? ' is-on' : ''}`}
+            onClick={onToggleSeen}
+            aria-pressed={b.seen}
+            aria-label={b.seen ? 'Marcar como pendiente' : 'Marcar como visto'}
+            title={b.seen ? 'Visto — marcar como pendiente' : 'Marcar como visto'}
+          >
+            <IconCheckCircle filled={b.seen} />
+          </button>
+        </div>
+        <div className="bookmark-actions">
+          <a className="bookmark-action" href={b.url} target="_blank" rel="noopener noreferrer" aria-label="Abrir enlace" title="Abrir enlace">
+            <IconExternal />
+          </a>
+          <button
+            type="button"
+            className={`bookmark-action${copied ? ' is-copied' : ''}`}
+            onClick={handleCopy}
+            aria-label="Copiar enlace"
+            title={copied ? 'Copiado' : 'Copiar enlace'}
+          >
+            {copied ? <IconCheck /> : <IconCopy />}
+          </button>
+          <button type="button" className="bookmark-action" onClick={onEdit} aria-label="Editar marcador" title="Editar">
+            <IconEdit />
+          </button>
+          <button type="button" className="bookmark-action bookmark-action--danger" onClick={onDelete} aria-label="Eliminar marcador" title="Eliminar">
+            <IconTrash />
+          </button>
+        </div>
+      </footer>
+    </article>
+  )
+}
+
+export default function Bookmarks({
+  bookmarks, error, onClearError, onCreate, onUpdate, onRefreshPreview, onDelete, focusBookmarkId, onFocusHandled,
+}: Props) {
+  const [urlDraft, setUrlDraft] = useState('')
+  const [addError, setAddError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<BookmarkFilter>('all')
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  // En escritorio scrollea la rejilla; en móvil, todo el contenedor (ver bookmarks.css).
+  const rootRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const counts = useMemo(() => countFilters(bookmarks), [bookmarks])
+  const tags = useMemo(() => collectTags(bookmarks), [bookmarks])
+  const visible = useMemo(
+    () => filterBookmarks(bookmarks, { query, filter, tag: activeTag }),
+    [bookmarks, query, filter, activeTag],
+  )
+  const editing = bookmarks.find(b => b.id === editingId) ?? null
+  const hasActiveFilters = query.trim() !== '' || filter !== 'all' || activeTag !== null
+
+  function resetFilters() {
+    setQuery('')
+    setFilter('all')
+    setActiveTag(null)
+  }
+
+  // Si la etiqueta activa deja de existir (se quitó de la última tarjeta que
+  // la tenía), el filtro quedaría vacío sin forma de verlo: se suelta durante
+  // el render (mismo patrón que Lists/Notes) en vez de en un efecto.
+  if (activeTag && !tags.some(t => t.tag === activeTag)) setActiveTag(null)
+
+  // Abrir desde la búsqueda global (ver Props.focusBookmarkId).
+  const [appliedFocusId, setAppliedFocusId] = useState<string | null>(null)
+  if (focusBookmarkId && focusBookmarkId !== appliedFocusId) {
+    setAppliedFocusId(focusBookmarkId)
+    resetFilters()
+    setHighlightId(focusBookmarkId)
+  }
+  useEffect(() => {
+    if (focusBookmarkId) onFocusHandled?.()
+  }, [focusBookmarkId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resalta y desplaza hasta la tarjeta señalada (búsqueda global o "ya
+  // guardado"); el resalte se apaga solo.
+  useEffect(() => {
+    if (!highlightId) return
+    scrollRef.current
+      ?.querySelector(`[data-bookmark-id="${CSS.escape(highlightId)}"]`)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const t = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS)
+    return () => clearTimeout(t)
+  }, [highlightId])
+
+  function submit(raw: string) {
+    const url = normalizeUrl(raw)
+    if (!url) {
+      setAddError('Eso no parece un enlace válido')
+      return
+    }
+    const duplicate = findDuplicate(bookmarks, url)
+    if (duplicate) {
+      setAddError('Ya tienes guardado este enlace')
+      resetFilters()
+      setHighlightId(duplicate.id)
+      return
+    }
+    onCreate(url)
+    setUrlDraft('')
+    setAddError(null)
+    onClearError()
+    // La tarjeta nueva entra arriba del todo.
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    rootRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function handleDelete(b: Bookmark) {
+    if (editingId === b.id) setEditingId(null)
+    onDelete(b.id)
+  }
+
+  const message = addError ?? error
+
+  return (
+    <div className="bookmarks-container" ref={rootRef}>
+      <div className="bookmarks-toolbar">
+        <form
+          className="bookmarks-add"
+          onSubmit={e => { e.preventDefault(); submit(urlDraft) }}
+        >
+          <div className="bookmarks-add-field">
+            <IconLink size={16} />
+            <input
+              value={urlDraft}
+              onChange={e => { setUrlDraft(e.target.value); setAddError(null); onClearError() }}
+              // Pegar un enlace válido lo guarda al instante, sin pulsar nada más.
+              onPaste={e => {
+                const text = e.clipboardData.getData('text')
+                if (normalizeUrl(text)) { e.preventDefault(); submit(text) }
+              }}
+              placeholder="Pega un enlace…"
+              aria-label="Enlace a guardar"
+              aria-invalid={message ? true : undefined}
+              inputMode="url"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+          </div>
+          <button className="btn-primary" type="submit" disabled={!urlDraft.trim()}>Guardar</button>
+        </form>
+        {message && <p className="bookmarks-add-error" role="alert">{message}</p>}
+
+        {bookmarks.length > 0 && (
+          <>
+            <div className="bookmarks-controls">
+              <div className="bookmarks-filters" role="group" aria-label="Filtrar marcadores">
+                {FILTERS.map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`bookmarks-chip${filter === f.id ? ' is-active' : ''}`}
+                    aria-pressed={filter === f.id}
+                    onClick={() => setFilter(f.id)}
+                  >
+                    {f.label}
+                    <span className="bookmarks-chip-count">{counts[f.id]}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="bookmarks-search">
+                <IconSearch size={15} />
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Buscar…"
+                  aria-label="Buscar marcadores"
+                />
+                {query && (
+                  <button type="button" className="bookmarks-search-clear" onClick={() => setQuery('')} aria-label="Limpiar búsqueda">
+                    <IconX size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {tags.length > 0 && (
+              <div className="bookmarks-tagbar" role="group" aria-label="Filtrar por etiqueta">
+                {tags.map(({ tag, count }) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`bookmarks-chip bookmarks-chip--tag${activeTag === tag ? ' is-active' : ''}`}
+                    aria-pressed={activeTag === tag}
+                    onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  >
+                    #{tag}
+                    <span className="bookmarks-chip-count">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="bookmarks-scroll" ref={scrollRef}>
+        {bookmarks.length === 0 ? (
+          <div className="bookmarks-empty">
+            <span className="bookmarks-empty-icon"><IconBookmarkPlaceholder /></span>
+            <h3>Guarda tu primer enlace</h3>
+            <p>Tutoriales, productos, artículos, webs… Pega una dirección arriba y la tarjeta se rellena sola con su título e imagen.</p>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="bookmarks-empty">
+            <span className="bookmarks-empty-icon"><IconSearch size={44} /></span>
+            <h3>Nada coincide</h3>
+            <p>Prueba con otra búsqueda o quita algún filtro.</p>
+            {hasActiveFilters && (
+              <button type="button" className="btn-secondary" onClick={resetFilters}>Limpiar filtros</button>
+            )}
+          </div>
+        ) : (
+          <>
+            <p className="bookmarks-count">
+              {hasActiveFilters ? `${visible.length} de ${bookmarks.length}` : bookmarks.length}{' '}
+              {bookmarks.length === 1 ? 'marcador' : 'marcadores'}
+            </p>
+            <div className="bookmarks-grid">
+              {visible.map((b, i) => (
+                <BookmarkCard
+                  key={b.id}
+                  bookmark={b}
+                  index={i}
+                  highlighted={highlightId === b.id}
+                  activeTag={activeTag}
+                  onToggleFavorite={() => onUpdate(b.id, { favorite: !b.favorite })}
+                  onToggleSeen={() => onUpdate(b.id, { seen: !b.seen })}
+                  onEdit={() => setEditingId(b.id)}
+                  onDelete={() => handleDelete(b)}
+                  onRefreshPreview={() => onRefreshPreview(b.id)}
+                  onTagClick={tag => setActiveTag(activeTag === tag ? null : tag)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {editing && (
+        <BookmarkModal
+          key={editing.id}
+          bookmark={editing}
+          knownTags={tags.map(t => t.tag)}
+          onSave={patch => onUpdate(editing.id, patch)}
+          onRefreshPreview={() => onRefreshPreview(editing.id)}
+          onClose={() => setEditingId(null)}
+        />
+      )}
+    </div>
+  )
+}

@@ -64,6 +64,28 @@ export interface ListItem {
   checked: boolean
 }
 
+// Estado de la descarga de título/imagen del enlace (la hace el servidor en
+// segundo plano al guardar): pending → done | failed.
+export type PreviewStatus = 'pending' | 'done' | 'failed'
+
+export interface Bookmark {
+  id: string
+  room: string
+  url: string
+  title: string
+  description: string
+  image: string | null
+  site_name: string | null
+  tags: string[]
+  favorite: boolean
+  seen: boolean   // "visto/leído"; false = pendiente
+  preview_status: PreviewStatus
+  added_by_name: string | null    // identidad de dispositivo (informativa, spoofeable)
+  added_by_color: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Note {
   id: string
   room: string

@@ -13,6 +13,7 @@ const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'backgroun
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
 const NOTE_KEYS = ['id', 'room', 'title', 'body', 'pinned', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
+const BOOKMARK_KEYS = ['id', 'room', 'url', 'title', 'description', 'image', 'site_name', 'tags', 'favorite', 'seen', 'preview_status', 'added_by_name', 'added_by_color', 'created_at', 'updated_at']
 const PRESENCE_PERSON_KEYS = ['name', 'color', 'online', 'last_seen_at']
 
 const keysOf = o => Object.keys(o).sort()
@@ -37,7 +38,7 @@ async function room(ip) {
 
 test('access-granted: claves del payload y del objeto room', async () => {
   const { granted } = await room('10.70.0.1')
-  sameKeys(granted, ['room', 'events', 'lists', 'listItems', 'notes'], 'access-granted')
+  sameKeys(granted, ['room', 'events', 'lists', 'listItems', 'notes', 'bookmarks'], 'access-granted')
   sameKeys(granted.room, ROOM_KEYS, 'room')
 })
 
@@ -145,6 +146,28 @@ test('clone-list: list-cloned claves, ítems duplicados sin marcar', async () =>
   assert.equal(cloned.items.length, 1)
   sameKeys(cloned.items[0], LIST_ITEM_KEYS, 'list-cloned.items[0]')
   assert.equal(cloned.items[0].checked, false)
+})
+
+test('bookmark-created / bookmark-updated / access-granted.bookmarks: claves de Bookmark', async () => {
+  const { s, name } = await room('10.70.0.14')
+  // Listeners antes de emitir: el alta y el fallo de la vista previa pueden
+  // llegar en el mismo paquete (IP privada → falla al instante).
+  const createdP = once(s, 'bookmark-created')
+  const updatedP = once(s, 'bookmark-updated')
+  s.emit('create-bookmark', { room: name, url: 'http://10.0.0.7/x', editor_name: 'Ana', editor_color: '#ff0000' })
+  const created = await createdP
+  sameKeys(created, BOOKMARK_KEYS, 'bookmark-created')
+  assert.equal(Array.isArray(created.tags), true)
+  assert.equal(typeof created.favorite, 'boolean')
+  assert.equal(typeof created.seen, 'boolean')
+  sameKeys(await updatedP, BOOKMARK_KEYS, 'bookmark-updated (preview)')
+
+  s.emit('join-room', { name, password: 'test1234' })
+  const granted = await once(s, 'access-granted')
+  sameKeys(granted.bookmarks[0], BOOKMARK_KEYS, 'access-granted.bookmarks[0]')
+
+  const ack = await emitAck(s, 'delete-bookmark', { room: name, id: created.id })
+  assert.deepEqual(keysOf(ack), ['label', 'undoToken'])
 })
 
 test('style-updated: claves de room', async () => {
