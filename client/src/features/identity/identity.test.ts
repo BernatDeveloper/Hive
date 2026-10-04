@@ -4,7 +4,7 @@
 import { describe, test, expect, beforeEach } from 'vitest'
 import {
   getGlobalIdentity, setGlobalIdentity, getRoomOverride, setRoomOverride,
-  clearRoomOverride, hasIdentity, getIdentity, IDENTITY_COLORS,
+  clearRoomOverride, hasIdentity, getIdentity, getDeviceId, IDENTITY_COLORS,
 } from './identity'
 
 beforeEach(() => {
@@ -79,5 +79,21 @@ describe('getIdentity (resolución)', () => {
     setGlobalIdentity({ name: 'Ana', color: '#ff0000' })
     setRoomOverride('sala-1', { name: 'Ana (trabajo)', color: '#0071e3' })
     expect(getIdentity()).toEqual({ name: 'Ana', color: '#ff0000' })
+  })
+})
+
+describe('id de dispositivo', () => {
+  test('se genera una vez, con el formato que acepta el servidor, y es estable', () => {
+    const id = getDeviceId()
+    expect(id).toMatch(/^[A-Za-z0-9_-]{8,64}$/)
+    expect(getDeviceId()).toBe(id)
+    expect(localStorage.getItem('deviceId')).toBe(id)
+  })
+
+  test('un valor guardado corrupto se sustituye por uno válido', () => {
+    localStorage.setItem('deviceId', 'no vale!')
+    const id = getDeviceId()
+    expect(id).not.toBe('no vale!')
+    expect(id).toMatch(/^[A-Za-z0-9_-]{8,64}$/)
   })
 })

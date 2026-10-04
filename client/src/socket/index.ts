@@ -1,4 +1,4 @@
-export { socket, rememberRoom, forgetRoom } from './client'
+export { socket, rememberRoom, forgetRoom, getStoredRoom, buildJoinPayload } from './client'
 export { emitWrite, emitWriteAck } from './queue'
 export { SocketProvider } from './SocketProvider'
 export { ConnectionBanner } from './ConnectionBanner'

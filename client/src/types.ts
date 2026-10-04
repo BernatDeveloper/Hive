@@ -30,10 +30,13 @@ export interface Event {
   last_editor_color: string | null
 }
 
-// Persona presente en la sala ahora mismo (identidad de dispositivo, no cuenta).
+// Miembro de la sala (identidad de dispositivo, no cuenta): conectado ahora
+// o que entró alguna vez. Conectados primero, luego el resto por recencia.
 export interface PresencePerson {
   name: string
   color: string
+  online: boolean
+  last_seen_at: string | null   // ISO; null si está conectado
 }
 
 export interface Room {

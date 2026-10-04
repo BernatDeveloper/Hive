@@ -53,9 +53,10 @@
   position: absolute;
   top: calc(100% + 0.5rem);
   right: 0;
-  min-width: 160px;
-  max-width: 240px;
-  max-height: 260px;
+  width: max-content;
+  min-width: 230px;
+  max-width: min(290px, calc(100vw - 2rem));
+  max-height: 340px;
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -65,27 +66,54 @@
   z-index: 20;
 }
 
+.dashboard-presence-popover-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.5rem 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.dashboard-presence-popover-online {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--success);
+}
+
 .dashboard-presence-popover-item {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.6rem;
   padding: 0.4rem 0.5rem;
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
   color: var(--text);
+}
+.dashboard-presence-popover-item.is-offline .dashboard-presence-avatar--list { opacity: 0.55; }
+
+.dashboard-presence-popover-name {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.dashboard-presence-popover-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.dashboard-presence-status {
   flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
+.dashboard-presence-status.is-online { color: var(--success); font-weight: 500; }
 
 .dashboard-presence-avatar {
+  position: relative;
   width: 24px;
   height: 24px;
   border-radius: 50%;
@@ -100,12 +128,45 @@
   flex-shrink: 0;
 }
 .dashboard-presence-avatar:first-child { margin-left: 0; }
+/* En el header, quien no está conectado se ve atenuado; quien sí, con un
+   punto verde. En la lista del desplegable la info va en texto al lado. */
+/* Velo dentro del círculo en vez de `opacity`: los avatares se solapan y con
+   opacity se transparentaban unos sobre otros. */
+.dashboard-presence .dashboard-presence-avatar.is-offline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  opacity: 0.55;
+}
+.dashboard-presence-avatar.is-online::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 2px solid var(--surface);
+}
 
+.dashboard-presence-avatar--list {
+  width: 26px;
+  height: 26px;
+  margin-left: 0;
+}
+
+/* "+N": un círculo más, del mismo tamaño que los avatares. Sin solaparse con
+   el último avatar (que va encima para que se vea su punto verde) — si no,
+   tapaba el "+". */
 .dashboard-presence-more {
-  margin-left: 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 600;
+  margin-left: 2px;
+  background: var(--surface-2);
   color: var(--muted);
+  font-size: 0.62rem;
+  text-transform: none;
 }
 
 .undo-toast {

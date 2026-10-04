@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './calendar.css'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
-import type { DateClickArg } from '@fullcalendar/interaction'
+import type { DateSelectArg, DatesSetArg, EventClickArg, EventDropArg, EventMountArg } from '@fullcalendar/core'
+import type { DateClickArg, EventResizeDoneArg } from '@fullcalendar/interaction'
 import esLocale from '@fullcalendar/core/locales/es'
 import type { Event, RecurrenceScope } from '../../types'
 import EventModal from './EventModal'
@@ -49,12 +49,73 @@ interface ModalState {
 // día, o un toque/clic que ya gestiona FullCalendar).
 const SWIPE_THRESHOLD_PX = 50
 
+// Animación al soltar en otra celda (vista mes): mientras se arrastra, un clon
+// flotante del evento sigue al cursor; al soltar en una celda válida
+// FullCalendar lo borra al instante y pinta el evento en su celda nueva — un
+// salto brusco desde donde se soltó. Se recuerda dónde estaba el clon y el
+// evento real se desliza desde ahí hasta su sitio (técnica FLIP), igual que
+// la vuelta animada de un arrastre que no cambia nada. En vista día no hace
+// falta: allí la vista previa ya se dibuja en el destino, sin clon flotante.
+const SETTLE_MS = 350
+
+// FullCalendar no expone el id del evento en el DOM; lo etiquetamos para
+// poder encontrar su elemento tras soltarlo.
+function tagEventEl(arg: EventMountArg) {
+  arg.el.dataset.eventId = arg.event.id
+}
+
+// El clon flotante que sigue al cursor (ElementMirror de FullCalendar):
+// position fixed y visible. En vista día no existe o está oculto.
+function findDragClone(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null
+  return [...root.querySelectorAll<HTMLElement>('.fc-event-dragging')]
+    .find(el => el.style.position === 'fixed' && el.style.display !== 'none') ?? null
+}
+
+function settleFrom(el: HTMLElement, from: { left: number; top: number }) {
+  const to = el.getBoundingClientRect()
+  const dx = from.left - to.left
+  const dy = from.top - to.top
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
+  // Por encima de las celdas posteriores mientras cruza la rejilla.
+  const layer = el.closest<HTMLElement>('.fc-daygrid-event-harness') ?? el
+  const prevZ = layer.style.zIndex
+  layer.style.zIndex = '10'
+  el.style.transition = 'none'
+  el.style.transform = `translate(${dx}px, ${dy}px)`
+  el.getBoundingClientRect() // fija la posición de partida antes de animar
+  el.style.transition = `transform ${SETTLE_MS}ms ease`
+  el.style.transform = ''
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
+    el.style.transition = ''
+    layer.style.zIndex = prevZ
+    el.removeEventListener('transitionend', finish)
+  }
+  el.addEventListener('transitionend', finish)
+  // Respaldo por si `transitionend` no llega nunca (justo lo que dejaba
+  // colgado el arrastre de FullCalendar — ver .fc .fc-event en calendar.css).
+  setTimeout(finish, SETTLE_MS + 100)
+}
+
 export default function Calendar({ events, primaryColor = '#3B82F6', conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict, jumpToEvent, onJumpHandled }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [swipeDir, setSwipeDir] = useState<'next' | 'prev' | null>(null)
   const isMobile = useIsMobile()
   const calendarRef = useRef<FullCalendar>(null)
+  const mainRef = useRef<HTMLDivElement>(null)
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  // Evita que el swipe de mes/día (más abajo) dispare navegación justo
+  // después de soltar un evento arrastrado — se marca al empezar el
+  // arrastre (bastante antes de soltar) y se resetea en el siguiente toque,
+  // no en el "stop" del propio drag: FullCalendar procesa su propio drag en
+  // el mismo touchend nativo, que llega ANTES que nuestro onTouchEnd de
+  // React (delegado en la raíz), así que un reset ahí ya llegaría tarde.
+  const draggingEventRef = useRef(false)
+  // Dónde estaba el clon flotante en el instante de soltar (ver SETTLE_MS).
+  const dropFromRef = useRef<{ left: number; top: number } | null>(null)
 
   // Resultado de la búsqueda global: salta a la vista día de ese evento y lo
   // abre para editar, como si se hubiera tocado en el calendario. Abrir el
@@ -104,6 +165,17 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
     }
   }
 
+  // FullCalendar no marca el botón "Hoy" como activo por su cuenta (no es un
+  // selector de vista como Mes/Día) — lo hacemos a mano reutilizando la
+  // misma clase que ya usa para esos dos, así hereda su estilo tal cual.
+  function handleDatesSet(arg: DatesSetArg) {
+    const btn = mainRef.current?.querySelector('.fc-today-button')
+    if (!btn) return
+    const now = new Date()
+    const isToday = now >= arg.view.currentStart && now < arg.view.currentEnd
+    btn.classList.toggle('fc-button-active', isToday)
+  }
+
   function handleEventClick(info: EventClickArg) {
     if (info.view.type === 'dayGridMonth') {
       if (info.event.start) goToDay(formatLocalDate(info.event.start))
@@ -114,6 +186,11 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
   }
 
   function handleTouchStart(e: React.TouchEvent) {
+    // Un toque que empieza sobre un evento nunca debe contar como swipe de
+    // mes/día, aunque FullCalendar acabe sin reconocerlo como arrastre de
+    // verdad (p. ej. soltarlo sin moverlo de celda) — eventDragStart es la
+    // señal "sí hubo arrastre", esto cubre también el caso "lo intenté".
+    draggingEventRef.current = !!(e.target as HTMLElement).closest?.('.fc-event')
     const t = e.touches[0]
     touchStartRef.current = { x: t.clientX, y: t.clientY }
   }
@@ -121,7 +198,7 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
   function handleTouchEnd(e: React.TouchEvent) {
     const start = touchStartRef.current
     touchStartRef.current = null
-    if (!start) return
+    if (!start || draggingEventRef.current) return
     const t = e.changedTouches[0]
     const dx = t.clientX - start.x
     const dy = t.clientY - start.y
@@ -134,6 +211,82 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
       api?.prev()
       setSwipeDir('prev')
     }
+  }
+
+  // Arrastrar un evento (con el ratón, o manteniéndolo pulsado en táctil —
+  // `editable` activa ambos gestos en FullCalendar sin configuración
+  // adicional) mueve su fecha/hora; redimensionar su borde cambia la
+  // duración. Mismo payload que EventModal al editar: hace falta mandar el
+  // evento entero (el servidor valida título/fechas), no solo lo que cambió.
+  // Una instancia de serie se desengancha sola (`scope: 'single'`) en vez de
+  // mover la serie entera sin preguntar — igual de antes-que-sorprender que
+  // el resto de la app.
+  // Devuelve si el cambio se aceptó (y se mandó al servidor).
+  function commitEventChange(fcEvent: EventDropArg['event'], revert: () => void): boolean {
+    const original = events.find(e => e.id === fcEvent.id)
+    if (!original || !fcEvent.start) { revert(); return false }
+    const allDay = fcEvent.allDay
+    const start = allDay ? formatLocalDate(fcEvent.start) : fcEvent.start.toISOString()
+    const endDate = fcEvent.end ?? fcEvent.start
+    const end = allDay ? formatLocalDate(endDate) : endDate.toISOString()
+    // Soltar en la misma celda o fuera de la rejilla ni siquiera llega aquí
+    // (FullCalendar no dispara eventDrop sin mutación válida; ver el
+    // comentario de `transition` en .fc .fc-event, calendar.css). Esto solo
+    // cubre el caso raro de una celda distinta que acaba en las mismas
+    // fechas: nada que guardar, y revert() cierra la interacción como
+    // FullCalendar espera de cualquier eventDrop/eventResize no aceptado.
+    if (start === original.start && end === original.end) { revert(); return false }
+    const scope: RecurrenceScope | undefined = original.recurrence_id ? 'single' : undefined
+    onUpdateEvent({
+      id: original.id,
+      title: original.title,
+      start,
+      end,
+      description: original.description,
+      color: original.color,
+      recurrence_rule: original.recurrence_rule,
+      recurrence_id: original.recurrence_id,
+      reminder_offset: original.reminder_offset,
+      ...(scope ? {} : { expected_updated_at: original.updated_at }),
+    }, scope)
+    return true
+  }
+
+  // Al empezar a arrastrar, escucha el "soltar" en fase de CAPTURA en window:
+  // llega antes que los mouseup/touchend que FullCalendar escucha en
+  // document, así que el clon flotante aún está donde lo soltó el usuario.
+  function handleEventDragStart() {
+    draggingEventRef.current = true
+    dropFromRef.current = null
+    const releaseEvents = ['pointerup', 'mouseup', 'touchend'] as const
+    const capture = () => {
+      for (const t of releaseEvents) window.removeEventListener(t, capture, true)
+      const clone = findDragClone(mainRef.current)
+      if (!clone) return
+      const r = clone.getBoundingClientRect()
+      dropFromRef.current = { left: r.left, top: r.top }
+    }
+    for (const t of releaseEvents) window.addEventListener(t, capture, true)
+  }
+
+  function handleEventDrop(info: EventDropArg) {
+    const from = dropFromRef.current
+    dropFromRef.current = null
+    if (!commitEventChange(info.event, info.revert) || !from) return
+    const id = info.event.id
+    // FullCalendar pinta el evento en su celda nueva justo después de este
+    // callback (microtarea); requestAnimationFrame va después de eso y antes
+    // de que el navegador pinte — no se llega a ver el evento ya colocado.
+    requestAnimationFrame(() => {
+      const el = mainRef.current?.querySelector<HTMLElement>(
+        `.fc-event[data-event-id="${CSS.escape(id)}"]:not(.fc-event-mirror):not(.fc-event-dragging)`
+      )
+      if (el) settleFrom(el, from)
+    })
+  }
+
+  function handleEventResize(info: EventResizeDoneArg) {
+    commitEventChange(info.event, info.revert)
   }
 
   // El modal ya se cerró (guardado optimista) cuando puede llegar el aviso de
@@ -164,7 +317,11 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
     return e.color ?? primaryColor
   }
 
-  const fcEvents = events.map(e => {
+  // Memoizado: el adaptador de React llama a calendar.resetOptions() en cada
+  // render de Calendar, y FullCalendar compara `events` elemento a elemento
+  // por identidad — sin memo, objetos nuevos en cada render le obligaban a
+  // re-parsear todos los eventos aunque nada hubiera cambiado.
+  const fcEvents = useMemo(() => events.map(e => {
     const bg = eventColor(e)
     return {
       id: e.id,
@@ -176,7 +333,7 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
       textColor: readableTextColor(bg),
       extendedProps: { description: e.description },
     }
-  })
+  }), [events, primaryColor]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="calendar-container">
@@ -189,6 +346,7 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
       )}
 
       <div
+        ref={mainRef}
         className={`calendar-main${swipeDir ? ` calendar-swiping-${swipeDir}` : ''}`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -196,6 +354,16 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
       >
         <FullCalendar
           ref={calendarRef}
+          datesSet={handleDatesSet}
+          // Color por defecto para cualquier "evento" sin color propio — la
+          // vista previa (mirror) de seleccionar un hueco nuevo no tiene
+          // evento real detrás, así que cae aquí. Los eventos reales siguen
+          // mandando su propio color por evento (ver fcEvents más abajo),
+          // que gana sobre esto — así el mirror de ARRASTRAR uno existente
+          // en vista día ya no se pinta con el primario (antes forzado por
+          // CSS en .fc-event-mirror, que no distinguía los dos casos).
+          eventColor={primaryColor}
+          eventTextColor={readableTextColor(primaryColor)}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
           // Seleccionable solo en vista día (crear arrastrando un hueco de
@@ -207,6 +375,17 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
           select={handleSelect}
           dateClick={handleDateClick}
           eventClick={handleEventClick}
+          // Arrastrar para mover/redimensionar un evento (ratón o, en
+          // táctil, mantener pulsado — gesto por defecto de FullCalendar,
+          // sin configuración extra). `eventDragStart`/`eventResizeStart`
+          // marcan `draggingEventRef` para que el swipe de mes/día (más
+          // abajo) no dispare justo después de soltar.
+          editable
+          eventDrop={handleEventDrop}
+          eventResize={handleEventResize}
+          eventDragStart={handleEventDragStart}
+          eventResizeStart={() => { draggingEventRef.current = true }}
+          eventDidMount={tagEventEl}
           // El enlace "+N más" de un día con muchos eventos lleva a su vista
           // día, en vez de abrir el popover propio de FullCalendar — mismo
           // patrón que cualquier otro clic sobre el día.

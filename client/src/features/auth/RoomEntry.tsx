@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import './auth.css'
-import { socket, rememberRoom, forgetRoom, awaitAuthResponse } from '../../socket'
+import { socket, rememberRoom, forgetRoom, awaitAuthResponse, buildJoinPayload } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import HomeScreen from './HomeScreen'
 import CreateRoomForm from './CreateRoomForm'
 import JoinRoomForm from './JoinRoomForm'
 import IdentityForm from '../identity/IdentityForm'
-import { getIdentity, hasIdentity, setGlobalIdentity } from '../identity/identity'
+import { hasIdentity, setGlobalIdentity } from '../identity/identity'
 import type { Identity } from '../identity/identity'
 
 interface Props {
@@ -67,7 +67,6 @@ export default function RoomEntry({ onEnter, notice }: Props) {
     setLoading(true)
     setError('')
 
-    const { name: editor_name, color: editor_color } = getIdentity(name)
     cancelRef.current = awaitAuthResponse({
       'room-created': () => {
         // Segunda ronda: unirse a la sala recién creada (timeout propio).
@@ -75,7 +74,7 @@ export default function RoomEntry({ onEnter, notice }: Props) {
           'access-granted': (payload) => enter(name, password, payload as AccessGranted),
           'access-denied': (msg) => fail(msg as string),
         }, fail)
-        socket.emit('join-room', { name, password, editor_name, editor_color })
+        socket.emit('join-room', buildJoinPayload(name, password))
       },
       'room-error': (msg) => fail(msg as string),
     }, fail)
@@ -87,12 +86,11 @@ export default function RoomEntry({ onEnter, notice }: Props) {
     setLoading(true)
     setError('')
 
-    const { name: editor_name, color: editor_color } = getIdentity(name)
     cancelRef.current = awaitAuthResponse({
       'access-granted': (payload) => enter(name, password, payload as AccessGranted),
       'access-denied': (msg) => { forgetRoom(); fail(msg as string) },
     }, fail)
-    socket.emit('join-room', { name, password, editor_name, editor_color })
+    socket.emit('join-room', buildJoinPayload(name, password))
   }
 
   if (mode === 'home') {

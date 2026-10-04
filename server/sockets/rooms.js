@@ -44,7 +44,7 @@ export function registerRoomHandlers(io, socket) {
     socket.emit('room-created', { name })
   })
 
-  safeOn(socket, 'join-room', 'access-denied', 'No se pudo acceder a la sala', async ({ name, password, editor_name, editor_color }) => {
+  safeOn(socket, 'join-room', 'access-denied', 'No se pudo acceder a la sala', async ({ name, password, editor_name, editor_color, device_id }) => {
     if (tooManyAttempts(socket)) return socket.emit('access-denied', RATE_LIMITED)
     if (!str(name, MAX.roomName) || !str(password, MAX.password)) return
     const result = await verifyRoomAccess(name, password)
@@ -53,7 +53,7 @@ export function registerRoomHandlers(io, socket) {
       return
     }
     markAuthed(socket, name)
-    setPresence(name, socket.id, editor_name, editor_color)
+    setPresence(name, socket.id, editor_name, editor_color, device_id)
     socket.emit('access-granted', {
       room: result.room,
       events: getEvents(name),

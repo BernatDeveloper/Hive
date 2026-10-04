@@ -110,3 +110,32 @@ export function getIdentity(room?: string): Identity {
   const override = room ? getRoomOverride(room) : null
   return override ?? getGlobalIdentity() ?? { name: 'Invitado', color: randomIdentityColor() }
 }
+
+// Id aleatorio y estable de este dispositivo: el servidor lo usa para
+// recordarlo como miembro de la sala (aunque se desconecte o se renombre) y
+// para contar varias pestañas como una sola persona. No es un secreto ni una
+// credencial — la identidad sigue siendo informativa y spoofeable.
+const DEVICE_KEY = 'deviceId'
+const DEVICE_ID = /^[A-Za-z0-9_-]{8,64}$/   // mismo formato que valida el servidor
+let memoryDeviceId: string | null = null    // si localStorage no está disponible
+
+function newDeviceId(): string {
+  // getRandomValues (no randomUUID): funciona también fuera de un contexto
+  // seguro, p. ej. probando desde el móvil por http://<ip-local>.
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return [...bytes].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+export function getDeviceId(): string {
+  try {
+    const stored = localStorage.getItem(DEVICE_KEY)
+    if (stored && DEVICE_ID.test(stored)) return stored
+    const id = newDeviceId()
+    localStorage.setItem(DEVICE_KEY, id)
+    return id
+  } catch {
+    memoryDeviceId ??= newDeviceId()
+    return memoryDeviceId
+  }
+}

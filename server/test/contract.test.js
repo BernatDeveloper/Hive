@@ -13,7 +13,7 @@ const ROOM_KEYS = ['name', 'created_at', 'timezone', 'primary_color', 'backgroun
 const LIST_KEYS = ['id', 'room', 'title', 'created_at']
 const LIST_ITEM_KEYS = ['id', 'list_id', 'room', 'text', 'checked']
 const NOTE_KEYS = ['id', 'room', 'title', 'body', 'pinned', 'created_at', 'updated_at', 'last_editor_name', 'last_editor_color']
-const PRESENCE_PERSON_KEYS = ['name', 'color']
+const PRESENCE_PERSON_KEYS = ['name', 'color', 'online', 'last_seen_at']
 
 const keysOf = o => Object.keys(o).sort()
 const sameKeys = (o, expected, msg) => assert.deepEqual(keysOf(o), [...expected].sort(), msg)

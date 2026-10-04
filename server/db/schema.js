@@ -82,6 +82,21 @@ export function createSchema() {
     )
   `)
 
+  // Miembros de la sala: cada dispositivo (identidad ligera, sin cuentas) que
+  // ha entrado alguna vez. La presencia en vivo sigue en memoria
+  // (sockets/presence.js); esto es lo que permite listar también a quien no
+  // está conectado ahora mismo. PK (room, device_id) ya sirve de índice por sala.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS room_member (
+      room         TEXT NOT NULL REFERENCES room(name) ON DELETE CASCADE,
+      device_id    TEXT NOT NULL,
+      name         TEXT NOT NULL,
+      color        TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      PRIMARY KEY (room, device_id)
+    )
+  `)
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS push_subscription (
       id         TEXT PRIMARY KEY,

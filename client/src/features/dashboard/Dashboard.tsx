@@ -3,6 +3,7 @@ import './dashboard.css'
 import { forgetRoom, usePresence } from '../../socket'
 import type { Room, Event, List, ListItem, Note } from '../../types'
 import { readableTextColor } from '../../shared/color'
+import { formatRelativeTime } from '../../shared/relativeTime'
 import ModuleGrid from './ModuleGrid'
 import type { ModuleId } from './ModuleGrid'
 import Calendar from '../calendar/Calendar'
@@ -27,6 +28,9 @@ interface Props {
   onLeave: (message?: string) => void
   onUpdateRoom: (room: Room) => void
 }
+
+// Avatares visibles en el header; el resto se resume en un círculo "+N".
+const MAX_AVATARS = 3
 
 const IconArrowLeft = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -64,6 +68,7 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
 
   const { colors, cssVars, roomWithColors } = useRoomStyle(room, onUpdateRoom)
   const presence = usePresence()
+  const onlineCount = presence.filter(p => p.online).length
   const cal = useEvents(room.name, initialEvents)
   const lists = useLists(room.name, initialLists, initialListItems)
   const notes = useNotes(room.name, initialNotes)
@@ -122,34 +127,50 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
         </div>
 
         <div className="dashboard-header-right">
-          {presence.length > 1 && (
+          {presence.length > 0 && (
             <div className="dashboard-presence-wrap" ref={peopleRef}>
               <button
                 type="button"
                 className="dashboard-presence"
                 onClick={() => setShowPeople(v => !v)}
-                aria-haspopup="true"
+                aria-haspopup="dialog"
                 aria-expanded={showPeople}
-                aria-label={`Personas en la sala: ${presence.map(p => p.name).join(', ')}`}
+                aria-label={`Miembros de la sala: ${presence.length}, ${onlineCount} en línea`}
               >
-                {presence.slice(0, 4).map((p, i) => (
+                {presence.slice(0, MAX_AVATARS).map((p, i) => (
                   <span
                     key={i}
-                    className="dashboard-presence-avatar"
-                    style={{ background: p.color, color: readableTextColor(p.color) }}
+                    className={`dashboard-presence-avatar${p.online ? ' is-online' : ' is-offline'}`}
+                    // El primero encima: así el punto verde (abajo a la
+                    // derecha) no lo tapa el avatar siguiente.
+                    style={{ background: p.color, color: readableTextColor(p.color), zIndex: MAX_AVATARS - i }}
                   >
                     {p.name.charAt(0)}
                   </span>
                 ))}
-                {presence.length > 4 && <span className="dashboard-presence-more">+{presence.length - 4}</span>}
+                {presence.length > MAX_AVATARS && (
+                  <span className="dashboard-presence-avatar dashboard-presence-more">+{presence.length - MAX_AVATARS}</span>
+                )}
               </button>
 
               {showPeople && (
-                <div className="dashboard-presence-popover" role="menu">
+                <div className="dashboard-presence-popover" role="dialog" aria-label="Miembros de la sala">
+                  <p className="dashboard-presence-popover-title">
+                    Miembros · {presence.length}
+                    <span className="dashboard-presence-popover-online">{onlineCount} en línea</span>
+                  </p>
                   {presence.map((p, i) => (
-                    <div key={i} className="dashboard-presence-popover-item">
-                      <span className="dashboard-presence-popover-dot" style={{ background: p.color }} />
-                      <span>{p.name}</span>
+                    <div key={i} className={`dashboard-presence-popover-item${p.online ? '' : ' is-offline'}`}>
+                      <span
+                        className={`dashboard-presence-avatar dashboard-presence-avatar--list${p.online ? ' is-online' : ''}`}
+                        style={{ background: p.color, color: readableTextColor(p.color) }}
+                      >
+                        {p.name.charAt(0)}
+                      </span>
+                      <span className="dashboard-presence-popover-name">{p.name}</span>
+                      <span className={`dashboard-presence-status${p.online ? ' is-online' : ''}`}>
+                        {p.online ? 'En línea' : p.last_seen_at ? `Visto ${formatRelativeTime(p.last_seen_at)}` : 'Desconectado'}
+                      </span>
                     </div>
                   ))}
                 </div>
