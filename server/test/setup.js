@@ -14,8 +14,8 @@ process.env.VAPID_SUBJECT ||= 'mailto:test@example.com'
 process.env.TRUST_PROXY = 'true' // los tests falsean X-Forwarded-For para el rate limit
 process.env.LOG_LEVEL = 'error'  // silencio en la salida de los tests
 
-const dbPath = process.env.DB_PATH ||= join(tmpdir(), `sc-test-${process.pid}-${Date.now()}.db`)
-const backupDir = process.env.BACKUP_DIR ||= join(tmpdir(), `sc-test-backups-${process.pid}-${Date.now()}`)
+const dbPath = process.env.DB_PATH ||= join(tmpdir(), `hive-test-${process.pid}-${Date.now()}.db`)
+const backupDir = process.env.BACKUP_DIR ||= join(tmpdir(), `hive-test-backups-${process.pid}-${Date.now()}`)
 
 // Borra la DB temporal (y sus sidecars WAL) y la carpeta de backups al
 // terminar el worker de test.

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import './pages.css'
+import HiveLogo from '../shared/HiveLogo'
 
 // Fecha de la última revisión del texto: cámbiala cada vez que cambie lo que
 // la app recoge o cómo lo trata (y revisa que sigue siendo cierto — ver CLAUDE.md).
@@ -11,30 +12,21 @@ const LAST_UPDATED = '4 de octubre de 2026'
 const DEFAULT_CONTACT = 'faenabernat@gmail.com'
 const CONTACT = (import.meta.env.VITE_PRIVACY_CONTACT as string | undefined)?.trim() || DEFAULT_CONTACT
 
-const Logo = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-    <line x1="16" y1="2" x2="16" y2="6"/>
-    <line x1="8" y1="2" x2="8" y2="6"/>
-    <line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-)
-
 export default function PrivacyPage() {
-  useEffect(() => { document.title = 'Política de privacidad · Calendario Compartido' }, [])
+  useEffect(() => { document.title = 'Política de privacidad · Hive' }, [])
 
   return (
     <main className="page">
       <a className="page-brand" href="/">
-        <span className="page-brand-logo"><Logo /></span>
-        Calendario Compartido
+        <span className="page-brand-logo"><HiveLogo size={20} /></span>
+        Hive
       </a>
 
       <article className="legal">
         <h1>Política de privacidad</h1>
         <p className="legal-updated">Última actualización: {LAST_UPDATED}</p>
         <p className="legal-lead">
-          Calendario Compartido es una herramienta para organizarte con otras personas en una «sala»: un calendario,
+          Hive es una herramienta para organizarte con otras personas en una «sala»: un calendario,
           listas, notas y marcadores compartidos. <strong>No hay cuentas ni registro</strong>: se entra con el nombre
           y la contraseña de la sala. Aquí te explicamos, sin rodeos, qué datos se tratan y qué puedes hacer con ellos.
         </p>

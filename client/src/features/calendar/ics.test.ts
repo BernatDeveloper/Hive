@@ -38,7 +38,7 @@ describe('eventsToICS', () => {
     expect((ics.match(/BEGIN:VEVENT/g) ?? []).length).toBe(1)
     expect(ics).toContain('RRULE:FREQ=DAILY;COUNT=3')
     // Usa el primer evento del grupo (orden por start) como representante.
-    expect(ics).toContain('UID:ev-1@calendario-compartido')
+    expect(ics).toContain('UID:ev-1@hive')
   })
 
   test('eventos sueltos (sin recurrence_id) van cada uno en su propio VEVENT', () => {

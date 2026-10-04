@@ -15,7 +15,7 @@ test('effectiveStart: evento de día completo usa la zona de la sala, no la de o
 })
 
 test('effectiveStart: evento con hora reinterpreta esos dígitos como hora de pared en la zona de la sala', () => {
-  // El modelo (MEJORAS-2.md Fase 8.1) es "hora de pared, sin instante fijo":
+  // El modelo (docs/historial/MEJORAS-2.md, Fase 8.1) es "hora de pared, sin instante fijo":
   // el mismo string "20:00" dispara a las 20:00 de la zona configurada,
   // cambie la que cambie — por eso aquí se ignora la "Z" original.
   const ev = { start: '2026-01-15T20:00:00.000Z' }

@@ -33,7 +33,7 @@ test('runBackup crea un fichero .db válido y abrible con las tablas de la app',
 test('con 15 backups presentes, tras un tick (que añade el de hoy) quedan 14', () => {
   resetBackupDir()
   for (let i = 1; i <= 15; i++) {
-    writeFileSync(join(config.backupDir, `calendario-2020-01-${String(i).padStart(2, '0')}.db`), '')
+    writeFileSync(join(config.backupDir, `hive-2020-01-${String(i).padStart(2, '0')}.db`), '')
   }
 
   runBackup() // añade el backup "de hoy" (16 en total) y poda al límite
@@ -42,8 +42,8 @@ test('con 15 backups presentes, tras un tick (que añade el de hoy) quedan 14', 
   assert.equal(files.length, 14)
   // Se conserva el más reciente de los ficheros antiguos y el de hoy; se
   // borran los más viejos primero (orden lexicográfico de la fecha en el nombre).
-  assert.ok(!files.includes('calendario-2020-01-01.db'), 'el backup más antiguo debería haberse borrado')
-  assert.ok(files.includes('calendario-2020-01-15.db'))
+  assert.ok(!files.includes('hive-2020-01-01.db'), 'el backup más antiguo debería haberse borrado')
+  assert.ok(files.includes('hive-2020-01-15.db'))
 })
 
 test('ignora ficheros del directorio que no siguen el patrón de nombre', () => {

@@ -159,7 +159,7 @@ export function resetReminderSent(id) {
 }
 ```
 
-**Aceptación:** arrancar el servidor no lanza errores de migración; inspeccionar `calendario.db` (`.schema event` y `.schema push_subscription`) muestra las columnas y la tabla nuevas.
+**Aceptación:** arrancar el servidor no lanza errores de migración; inspeccionar `hive.db` (`.schema event` y `.schema push_subscription`) muestra las columnas y la tabla nuevas.
 
 ---
 

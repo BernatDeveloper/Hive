@@ -5,7 +5,7 @@ import { config } from '../config/env.js'
 import { logger } from '../lib/logger.js'
 
 const RETAIN = 14
-const NAME_RE = /^calendario-\d{4}-\d{2}-\d{2}\.db$/
+const NAME_RE = /^hive-\d{4}-\d{2}-\d{2}\.db$/
 
 // Copia de seguridad con VACUUM INTO: compacta y escribe una DB consistente
 // en un solo fichero, sin bloquear las escrituras normales.
@@ -14,7 +14,7 @@ const NAME_RE = /^calendario-\d{4}-\d{2}-\d{2}\.db$/
 // que no hay inyección posible.
 export function runBackup() {
   mkdirSync(config.backupDir, { recursive: true })
-  const file = join(config.backupDir, `calendario-${new Date().toISOString().slice(0, 10)}.db`)
+  const file = join(config.backupDir, `hive-${new Date().toISOString().slice(0, 10)}.db`)
   // VACUUM INTO falla si el fichero destino ya existe (p. ej. dos arranques
   // el mismo día): lo sustituimos.
   if (existsSync(file)) unlinkSync(file)

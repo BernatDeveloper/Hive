@@ -7,7 +7,7 @@ import { runMigrations } from './migrations.js'
 // esquema ANTERIOR (sin la columna que runMigrations() debe añadir). Los
 // demás tests arrancan con createSchema() ya al día (vía initDb()), así que
 // nunca ejercitan de verdad el camino de actualización de una DB existente
-// — esto reproduce justo ese escenario (el bug real: una calendario.db de
+// — esto reproduce justo ese escenario (el bug real: una hive.db de
 // antes de añadir note.pinned).
 test('runMigrations añade columnas que faltan en una DB con esquema antiguo', () => {
   db.exec(`

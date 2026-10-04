@@ -61,7 +61,7 @@ export function eventsToICS(events: Event[], calName: string): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Calendario Compartido//ES',
+    'PRODID:-//Hive//ES',
     'CALSCALE:GREGORIAN',
     `X-WR-CALNAME:${escapeText(calName)}`,
   ]
@@ -72,7 +72,7 @@ export function eventsToICS(events: Event[], calName: string): string {
     const freq = first.recurrence_id && first.recurrence_rule ? RRULE_FREQ[first.recurrence_rule] : null
 
     lines.push('BEGIN:VEVENT')
-    lines.push(`UID:${first.id}@calendario-compartido`)
+    lines.push(`UID:${first.id}@hive`)
     lines.push(`DTSTAMP:${dtstamp}`)
     lines.push(...icsDateLines(first))
     if (freq) lines.push(`RRULE:${freq};COUNT=${group.length}`)

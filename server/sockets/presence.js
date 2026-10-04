@@ -20,7 +20,7 @@ const MAX_NAME = 40
 const DEFAULT_NAME = 'Invitado'
 const DEFAULT_COLOR = '#0071e3'
 
-// Identidad informativa y spoofeable (ver MEJORAS-2.md Fase 9): sin
+// Identidad informativa y spoofeable (ver docs/historial/MEJORAS-2.md, Fase 9): sin
 // registro, así que cualquier valor ausente o con forma inválida cae a un
 // valor por defecto en vez de rechazar el join.
 function sanitizeIdentity(name, color) {
@@ -99,7 +99,7 @@ export function registerPresenceHandlers(io, socket) {
     }
   })
 
-  // Refresco en vivo (MEJORAS-3): al renombrarse en Ajustes, actualiza la
+  // Refresco en vivo (docs/historial/MEJORAS-3.md): al renombrarse en Ajustes, actualiza la
   // entrada de presencia de este socket (y su fila de miembro, si tiene
   // deviceId) y la redifunde. La clave de sala aquí es `name`, no `room` —
   // mismo caso que update-room-style/-timezone.

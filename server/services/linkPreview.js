@@ -19,7 +19,7 @@ import zlib from 'node:zlib'
 //  - los redirects se siguen a mano (máx. 4) y cada salto pasa por lo mismo;
 //  - plazo total, tamaño máximo leído y solo se acepta HTML (o una imagen).
 
-const USER_AGENT = 'Mozilla/5.0 (compatible; CalendarioCompartido-LinkPreview/1.0)'
+const USER_AGENT = 'Mozilla/5.0 (compatible; Hive-LinkPreview/1.0)'
 const MAX_REDIRECTS = 4
 const DEFAULT_TIMEOUT_MS = 6000
 // YouTube y similares llevan ~700 KB de script inline antes de los meta tags.
