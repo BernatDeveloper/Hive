@@ -8,3 +8,26 @@ dist/
 .env
 .env.local
 .claude/
+
+# Copias de seguridad de la base de datos (VACUUM INTO)
+backups/
+
+# Documentos de planificación antiguos (siguen en disco)
+docs/historial/
+
+# Builds, cobertura y cachés de herramientas
+coverage/
+*.tsbuildinfo
+.vite/
+.vercel/
+vite.config.*.timestamp-*
+
+# Logs de gestores de paquetes
+pnpm-debug.log*
+npm-debug.log*
+
+# Editor y sistema operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
