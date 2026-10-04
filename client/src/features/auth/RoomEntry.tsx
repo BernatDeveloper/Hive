@@ -12,6 +12,7 @@ import type { Identity } from '../identity/identity'
 interface Props {
   onEnter: (room: Room, events: Event[], lists: List[], listItems: ListItem[], notes: Note[], bookmarks: Bookmark[]) => void
   notice?: string | null
+  noticeTone?: 'error' | 'info'
 }
 
 type Mode = 'home' | 'identity' | 'create' | 'join'
@@ -25,7 +26,7 @@ interface AccessGranted {
   bookmarks: Bookmark[]
 }
 
-export default function RoomEntry({ onEnter, notice }: Props) {
+export default function RoomEntry({ onEnter, notice, noticeTone }: Props) {
   const [mode, setMode] = useState<Mode>('home')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -95,7 +96,7 @@ export default function RoomEntry({ onEnter, notice }: Props) {
   }
 
   if (mode === 'home') {
-    return <HomeScreen onCreate={() => goTo('create')} onJoin={() => goTo('join')} notice={notice} />
+    return <HomeScreen onCreate={() => goTo('create')} onJoin={() => goTo('join')} notice={notice} noticeTone={noticeTone} />
   }
 
   if (mode === 'identity') {

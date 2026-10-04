@@ -10,6 +10,9 @@ import Calendar from '../calendar/Calendar'
 import Lists from '../lists/Lists'
 import Notes from '../notes/Notes'
 import Bookmarks from '../bookmarks/Bookmarks'
+import ShareLinkDialog from '../bookmarks/ShareLinkDialog'
+import { findDuplicate } from '../bookmarks/bookmarkUtils'
+import type { SharedLink } from '../bookmarks/shareTarget'
 import RoomSettings from '../settings/RoomSettings'
 import GlobalSearch from '../search/GlobalSearch'
 import { useRoomStyle } from '../settings/useRoomStyle'
@@ -28,6 +31,10 @@ interface Props {
   initialListItems: ListItem[]
   initialNotes: Note[]
   initialBookmarks: Bookmark[]
+  // Enlace llegado desde "Compartir" del sistema: se ofrece guardarlo (con
+  // confirmación) en cuanto se entra a la sala. `onSharedHandled` lo consume.
+  sharedLink?: SharedLink | null
+  onSharedHandled?: () => void
   onLeave: (message?: string) => void
   onUpdateRoom: (room: Room) => void
 }
@@ -56,7 +63,7 @@ const IconSearch = () => (
   </svg>
 )
 
-export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, initialBookmarks, onLeave, onUpdateRoom }: Props) {
+export default function Dashboard({ room, initialEvents, initialLists, initialListItems, initialNotes, initialBookmarks, sharedLink, onSharedHandled, onLeave, onUpdateRoom }: Props) {
   const [activeModule, setActiveModule] = useState<ModuleId | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
@@ -113,6 +120,21 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [showPeople])
+
+  const sharedDuplicate = sharedLink ? findDuplicate(bookmarks.bookmarks, sharedLink.url) : undefined
+
+  function saveSharedLink() {
+    if (!sharedLink) return
+    bookmarks.createBookmark(sharedLink.url)
+    setActiveModule('bookmarks') // se ve entrar la tarjeta nueva arriba
+    onSharedHandled?.()
+  }
+
+  function showSharedDuplicate(id: string) {
+    setActiveModule('bookmarks')
+    setBookmarksFocusId(id)
+    onSharedHandled?.()
+  }
 
   function leave() {
     forgetRoom()
@@ -266,6 +288,16 @@ export default function Dashboard({ room, initialEvents, initialLists, initialLi
 
       {showSettings && (
         <RoomSettings room={roomWithColors} events={cal.events} onClose={() => setShowSettings(false)} onLeave={leave} />
+      )}
+
+      {sharedLink && (
+        <ShareLinkDialog
+          link={sharedLink}
+          duplicate={sharedDuplicate}
+          onSave={saveSharedLink}
+          onShowExisting={() => sharedDuplicate && showSharedDuplicate(sharedDuplicate.id)}
+          onCancel={() => onSharedHandled?.()}
+        />
       )}
 
       {showSearch && (

@@ -6,6 +6,8 @@ import Dashboard from './features/dashboard/Dashboard'
 import { ConnectionBanner, socket, rememberRoom, forgetRoom, getStoredRoom, awaitAuthResponse, buildJoinPayload } from './socket'
 import { useServiceWorkerUpdate } from './pwa'
 import type { Room, Event, List, ListItem, Note, Bookmark } from './types'
+import { parseShareParams } from './features/bookmarks/shareTarget'
+import type { SharedLink } from './features/bookmarks/shareTarget'
 
 interface AccessGranted {
   room: Room
@@ -25,12 +27,27 @@ export default function App() {
   const [initialNotes, setInitialNotes] = useState<Note[]>([])
   const [initialBookmarks, setInitialBookmarks] = useState<Bookmark[]>([])
   const [entryNotice, setEntryNotice] = useState<string | null>(null)
+  // Enlace que llega desde "Compartir" del sistema (Web Share Target: el
+  // manifest abre la app en `/?title=…&text=…&url=…`). Se lee UNA vez al
+  // montar y sobrevive a la pantalla de entrada: si hace falta entrar a la
+  // sala, el Dashboard lo recibe después y pide confirmar antes de guardar.
+  const [sharedLink, setSharedLink] = useState<SharedLink | null>(() => parseShareParams(window.location.search))
   // Sala guardada de una visita anterior (leída UNA sola vez, al montar) — si
   // existe, reintenta entrar sola antes de mostrar la pantalla de inicio, así
   // una recarga no obliga a volver a teclear nombre + contraseña.
   // 'checking' solo dura lo que tarda la respuesta del servidor.
   const [storedRoom] = useState(() => getStoredRoom())
   const [checkingStoredRoom, setCheckingStoredRoom] = useState(() => storedRoom !== null)
+
+  // Quita los parámetros de la URL: si no, recargar la página volvería a
+  // ofrecer guardar el mismo enlace.
+  useEffect(() => {
+    if (parseShareParams(window.location.search)) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+    }
+  }, [])
+
+  const handleSharedHandled = useCallback(() => setSharedLink(null), [])
 
   // Identidad estable: Dashboard la usa como dependencia de un listener de
   // socket persistente y no debe re-registrarse en cada render.
@@ -90,7 +107,8 @@ export default function App() {
       )}
       {!room ? (
         <RoomEntry
-          notice={entryNotice}
+          notice={entryNotice ?? (sharedLink ? 'Entra en tu sala para guardar el enlace que has compartido.' : null)}
+          noticeTone={entryNotice ? 'error' : 'info'}
           onEnter={(r, ev, lists, listItems, notes, bookmarks) => {
             setEntryNotice(null)
             setRoom(r)
@@ -109,6 +127,8 @@ export default function App() {
           initialListItems={initialListItems}
           initialNotes={initialNotes}
           initialBookmarks={initialBookmarks}
+          sharedLink={sharedLink}
+          onSharedHandled={handleSharedHandled}
           onLeave={handleLeave}
           onUpdateRoom={setRoom}
         />
