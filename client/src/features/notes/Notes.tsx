@@ -98,8 +98,12 @@ export default function Notes({ notes, onCreateNote, onUpdateNote, onDeleteNote,
     if (!selectedId) return
     const note = notes.find(n => n.id === selectedId)
     if (note) {
+      // Reset deliberado al cambiar de nota: también reinicia baseRef (la base
+      // de la concurrencia optimista), que no puede tocarse durante el render.
+      /* eslint-disable react-hooks/set-state-in-effect */
       setLocalTitle(note.title)
       setLocalBody(note.body)
+      /* eslint-enable react-hooks/set-state-in-effect */
       setSaveStatus('idle')
       setBodyFocused(false)
       baseRef.current = { updated_at: note.updated_at, title: note.title, body: note.body }

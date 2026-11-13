@@ -167,13 +167,12 @@ export default function Lists({
   const newItemRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
 
-  // Si la lista seleccionada fue eliminada, deseleccionar
-  useEffect(() => {
-    if (selectedId !== null && !lists.find(l => l.id === selectedId)) {
-      setSelectedId(null)
-      if (isMobile) setMobilePage('lists')
-    }
-  }, [lists, selectedId, isMobile])
+  // Si la lista seleccionada fue eliminada, deseleccionar. Se ajusta durante
+  // el render (patrón de React para estado derivado de props), no en un efecto.
+  if (selectedId !== null && !lists.some(l => l.id === selectedId)) {
+    setSelectedId(null)
+    if (isMobile) setMobilePage('lists')
+  }
 
   // Auto-descarta el aviso de "completada" a los 2.2s.
   useEffect(() => {
