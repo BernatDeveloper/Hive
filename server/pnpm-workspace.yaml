@@ -1,3 +1,8 @@
+# pnpm 11 solo ejecuta los scripts de instalación de las dependencias que se
+# permiten aquí con `allowBuilds`. better-sqlite3 los necesita (addon nativo);
+# sin esto `pnpm install` falla con ERR_PNPM_IGNORED_BUILDS (p. ej. en Railway).
+allowBuilds:
+  better-sqlite3: true
 onlyBuiltDependencies:
   - better-sqlite3
 # pnpm 11 en Windows a veces reporta ERR_PNPM_IGNORED_BUILDS para better-sqlite3
