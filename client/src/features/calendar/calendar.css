@@ -505,12 +505,14 @@
 /* Icono de "Todo el día" en el eje de la vista día (ver AllDayIcon en
    Calendar.tsx): centrado, tono atenuado, sin el tamaño de fuente heredado
    que partía el texto en dos líneas. */
-.fc .fc-timegrid-axis-cushion { padding: 0 !important; max-width: none !important; }
+/* FullCalendar alinea el contenido del eje a la derecha (flex-end), lo que
+   dejaba el icono pegado a la línea vertical: se centra y se le da aire. */
+.fc .fc-timegrid-axis-frame { justify-content: center !important; }
+.fc .fc-timegrid-axis-cushion { padding: 0 8px !important; max-width: none !important; }
 .fc .calendar-allday {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
   color: var(--muted);
 }
 
