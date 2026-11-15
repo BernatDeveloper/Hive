@@ -121,13 +121,26 @@
 }
 .modal-actions--stacked > :first-child { grid-column: 1 / -1; }
 .modal-actions--stacked > :first-child:nth-last-child(2) { grid-column: auto; }
+/* Mismo molde para los tres (alto, borde de 1 px, radio, peso de letra); solo
+   cambia el color: relleno sólido = acción principal, tinte rojo = destructiva,
+   tinte neutro = cancelar. */
+.modal-actions--stacked > button {
+  border: 1px solid transparent;
+  box-shadow: none;
+  font-weight: 600;
+}
 .modal-actions--stacked .btn-danger {
   background: rgba(255, 59, 48, 0.12);
+  border-color: rgba(255, 59, 48, 0.45);
   color: var(--danger);
-  box-shadow: none;
 }
-.modal-actions--stacked .btn-danger:hover { opacity: 1; background: rgba(255, 59, 48, 0.2); }
-.modal-actions--stacked .btn-ghost { border: 1px solid var(--border); }
+.modal-actions--stacked .btn-danger:hover { opacity: 1; background: rgba(255, 59, 48, 0.22); }
+.modal-actions--stacked .btn-ghost {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+.modal-actions--stacked .btn-ghost:hover { background: var(--border); color: var(--text); }
 
 /* ── Toggle switch (reutilizable: repetición, notificaciones, ...) ── */
 .modal-toggle-row {
