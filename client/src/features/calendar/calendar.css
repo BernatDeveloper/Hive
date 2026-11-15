@@ -460,14 +460,15 @@
   color: var(--text) !important;
 }
 
-/* El círculo de "hoy" se dimensiona para ocupar el mismo alto total que un
-   número normal (line-height 1 × font-size + padding 6px arriba/abajo ≈
-   25px) — si no, la fila que contiene "hoy" sale más alta que el resto. */
+/* El marcador de "hoy" es una píldora (extremos totalmente redondeados), no
+   un círculo. Su ALTO se dimensiona para ocupar lo mismo que un número normal
+   (line-height 1 × font-size + padding 6px arriba/abajo ≈ 25px) — si no, la
+   fila que contiene "hoy" sale más alta que el resto; solo el ancho crece. */
 .fc .fc-day-today .fc-daygrid-day-number {
   background: var(--primary) !important;
   color: var(--primary-text) !important;
-  border-radius: 50% !important;
-  width: 21px !important;
+  border-radius: 999px !important;
+  min-width: 38px !important;
   height: 21px !important;
   display: flex !important;
   align-items: center !important;
@@ -589,7 +590,7 @@
     padding: 4px 7px !important;
   }
   .fc .fc-day-today .fc-daygrid-day-number {
-    width: 17px !important;
+    min-width: 30px !important;
     height: 17px !important;
     font-size: 0.62rem !important;
     margin: 1px !important;
