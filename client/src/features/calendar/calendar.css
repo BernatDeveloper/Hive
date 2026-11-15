@@ -49,6 +49,73 @@
 }
 .calendar-fab:hover { transform: scale(1.06); box-shadow: var(--shadow-xl); }
 
+/* ── Borrador de evento (móvil, vista día) ──
+   Bloque de hora que se ajusta antes de crear el evento (ver DRAFT_ID en
+   Calendar.tsx) + barra inferior que abre el formulario. */
+.calendar-draft-bar {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: 0.75rem;
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+  animation: slideUpModal 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.calendar-draft-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.95rem 1rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.calendar-draft-time {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.calendar-draft-open svg { color: var(--muted); flex-shrink: 0; }
+.calendar-draft-close {
+  width: 48px;
+  background: none;
+  border: none;
+  border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+  color: var(--muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* El bloque: contorno del color primario para que se distinga de un evento
+   real, y tiradores (puntos) en las esquinas superior-izquierda e
+   inferior-derecha, como en Google Calendar. Son los puntos de FullCalendar
+   para un evento seleccionado (el borrador se mantiene seleccionado). */
+.fc .fc-draft {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary), var(--shadow-md) !important;
+  z-index: 5 !important;
+}
+.fc .fc-draft .fc-event-resizer {
+  background: var(--surface) !important;
+  border: 2px solid var(--primary) !important;
+}
+.fc .fc-draft .fc-event-resizer-start { left: 14px !important; margin-left: 0 !important; }
+.fc .fc-draft .fc-event-resizer-end { left: auto !important; right: 14px !important; margin-left: 0 !important; }
+
 /* ── Aviso de conflicto (evento editado por otra persona) ── */
 .event-conflict-banner {
   display: flex;

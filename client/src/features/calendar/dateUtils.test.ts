@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { addDaysToDateStr, isoToLocalDate, isoToLocalTime, dayOfWeekName, formatDateShort, buildEventDates, formatLocalDate, localDateKey } from './dateUtils'
+import { addDaysToDateStr, isoToLocalDate, isoToLocalTime, dayOfWeekName, formatDateShort, buildEventDates, formatLocalDate, localDateKey, defaultDraftRange, formatTimeRange } from './dateUtils'
 
 describe('addDaysToDateStr', () => {
   test('cambio de mes hacia adelante', () => {
@@ -107,5 +107,37 @@ describe('buildEventDates', () => {
     })
     expect(start).toBe('2026-06-15')
     expect(end).toBe('2026-06-15')
+  })
+})
+
+describe('defaultDraftRange', () => {
+  test('redondea hacia abajo al tramo de 30 min y dura 1 h', () => {
+    const { start, end } = defaultDraftRange(new Date(2026, 5, 15, 10, 20, 45))
+    expect(start).toEqual(new Date(2026, 5, 15, 10, 0, 0))
+    expect(end).toEqual(new Date(2026, 5, 15, 11, 0, 0))
+  })
+
+  test('un hueco ya alineado se mantiene', () => {
+    const { start, end } = defaultDraftRange(new Date(2026, 5, 15, 14, 30))
+    expect(start).toEqual(new Date(2026, 5, 15, 14, 30))
+    expect(end).toEqual(new Date(2026, 5, 15, 15, 30))
+  })
+
+  test('no cruza la medianoche: se acorta a las 24:00', () => {
+    const { start, end } = defaultDraftRange(new Date(2026, 5, 15, 23, 30))
+    expect(start).toEqual(new Date(2026, 5, 15, 23, 30))
+    expect(end).toEqual(new Date(2026, 5, 16, 0, 0))
+  })
+
+  test('no modifica la fecha que recibe', () => {
+    const clicked = new Date(2026, 5, 15, 10, 20)
+    defaultDraftRange(clicked)
+    expect(clicked).toEqual(new Date(2026, 5, 15, 10, 20))
+  })
+})
+
+describe('formatTimeRange', () => {
+  test('formato hh:mm – hh:mm con ceros', () => {
+    expect(formatTimeRange(new Date(2026, 5, 15, 9, 5), new Date(2026, 5, 15, 10, 0))).toBe('09:05 – 10:00')
   })
 })

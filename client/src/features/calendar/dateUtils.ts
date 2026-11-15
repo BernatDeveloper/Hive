@@ -74,3 +74,26 @@ export function buildEventDates({ startDate, endDate, startTime, endTime, showTi
       : addDaysToDateStr(endDate, 1)
   return { start, end }
 }
+
+// ── Borrador de evento (móvil, vista día) ──
+// Al tocar un hueco se propone un bloque de DRAFT_DURATION_MIN minutos que
+// empieza en el tramo de DRAFT_SNAP_MIN más cercano por debajo; el usuario lo
+// ajusta antes de abrir el formulario.
+export const DRAFT_SNAP_MIN = 30
+export const DRAFT_DURATION_MIN = 60
+
+// Nunca cruza la medianoche: la vista día solo muestra un día, así que un
+// bloque que empezara a las 23:30 se acorta (acaba a las 24:00).
+export function defaultDraftRange(clicked: Date): { start: Date; end: Date } {
+  const start = new Date(clicked)
+  start.setMinutes(Math.floor(start.getMinutes() / DRAFT_SNAP_MIN) * DRAFT_SNAP_MIN, 0, 0)
+  const end = new Date(start.getTime() + DRAFT_DURATION_MIN * 60_000)
+  const midnight = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1)
+  return { start, end: end > midnight ? midnight : end }
+}
+
+// "10:00 – 11:00" (hora local).
+export function formatTimeRange(start: Date, end: Date): string {
+  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `${hhmm(start)} – ${hhmm(end)}`
+}

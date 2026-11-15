@@ -4,7 +4,7 @@ import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import type { DateSelectArg, DatesSetArg, EventClickArg, EventDropArg, EventMountArg } from '@fullcalendar/core'
+import type { CalendarApi, DateSelectArg, DatesSetArg, EventClickArg, EventDropArg, EventInput, EventMountArg } from '@fullcalendar/core'
 import type { DateClickArg, EventResizeDoneArg } from '@fullcalendar/interaction'
 import esLocale from '@fullcalendar/core/locales/es'
 import type { Event, RecurrenceScope } from '../../types'
@@ -12,7 +12,7 @@ import EventModal from './EventModal'
 import type { EventSavePayload } from './EventModal'
 import { readableTextColor } from '../../shared/color'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { formatLocalDate, localDateKey } from './dateUtils'
+import { defaultDraftRange, formatLocalDate, formatTimeRange, localDateKey } from './dateUtils'
 
 const IconPlus = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -48,6 +48,35 @@ interface Props {
   // no reabrirlo en cada re-render.
   jumpToEvent?: Event | null
   onJumpHandled?: () => void
+}
+
+const IconChevronUp = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="18 15 12 9 6 15"/>
+  </svg>
+)
+
+// Borrador de evento (solo móvil, vista día): al tocar un hueco aparece un
+// bloque de hora que se mueve y se redimensiona antes de abrir el formulario
+// (barra inferior). Vive como un evento más de FullCalendar con este id
+// reservado — así reutiliza su arrastre/redimensionado — pero nunca se manda
+// al servidor: sus cambios solo actualizan `draft`.
+const DRAFT_ID = '__draft__'
+interface DraftRange { start: Date; end: Date }
+
+// En táctil, FullCalendar solo deja redimensionar un evento que esté
+// "seleccionado" (normalmente tras mantenerlo pulsado). Para que los tiradores
+// del borrador respondan desde el primer toque se selecciona por código. No
+// hay API pública para ello: se usa `dispatch` y la instancia interna del
+// evento (existen en FullCalendar 6.x). Si dejaran de existir devuelve false y
+// queda el comportamiento normal (mantener pulsado el bloque lo selecciona).
+function selectDraftEvent(api: CalendarApi | undefined): boolean {
+  if (!api) return false
+  const instanceId = (api.getEventById(DRAFT_ID) as unknown as { _instance?: { instanceId?: string } } | null)?._instance?.instanceId
+  const dispatch = (api as unknown as { dispatch?: (action: { type: string; eventInstanceId: string }) => void }).dispatch
+  if (!instanceId || typeof dispatch !== 'function') return false
+  dispatch.call(api, { type: 'SELECT_EVENT', eventInstanceId: instanceId })
+  return true
 }
 
 interface ModalState {
@@ -118,6 +147,7 @@ function settleFrom(el: HTMLElement, from: { left: number; top: number }) {
 export default function Calendar({ events, primaryColor = '#3B82F6', conflict, onCreateEvent, onUpdateEvent, onDeleteEvent, onDismissConflict, jumpToEvent, onJumpHandled }: Props) {
   const [modal, setModal] = useState<ModalState>({ open: false })
   const [swipeDir, setSwipeDir] = useState<'next' | 'prev' | null>(null)
+  const [draft, setDraft] = useState<DraftRange | null>(null)
   const isMobile = useIsMobile()
   const calendarRef = useRef<FullCalendar>(null)
   const mainRef = useRef<HTMLDivElement>(null)
@@ -153,16 +183,33 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
   }, [jumpToEvent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(info: DateSelectArg) {
+    // Móvil: mantener pulsado y arrastrar sobre la rejilla propone ese tramo
+    // como borrador (ajustable) en vez de abrir ya el formulario.
+    if (isMobile && !info.allDay) {
+      setDraft({ start: info.start, end: info.end })
+      info.view.calendar.unselect()
+      return
+    }
     setModal({ open: true, start: info.startStr, end: info.endStr })
+  }
+
+  // Abre el formulario con las horas del borrador y lo descarta (el evento
+  // real, si se guarda, ocupará su sitio).
+  function openDraft() {
+    if (!draft) return
+    setModal({ open: true, start: draft.start.toISOString(), end: draft.end.toISOString() })
+    setDraft(null)
   }
 
   // Navega a la vista día de esa fecha (estilo Google Calendar); si ese día
   // no tiene ningún evento, además abre directamente el modal de uno nuevo —
   // si ya tenía eventos, solo navega y el usuario toca el que quiera editar.
+  // En móvil no se abre el formulario: se deja la rejilla limpia para tocar
+  // el hueco que se quiera (borrador).
   function goToDay(dateStr: string) {
     calendarRef.current?.getApi().changeView('timeGridDay', dateStr)
     const hasEvents = events.some(e => localDateKey(e.start) === dateStr)
-    if (!hasEvents) {
+    if (!hasEvents && !isMobile) {
       // Sin `end`: EventModal lo hace caer a `start` (mismo día, inclusivo).
       // Pasar aquí `end: dateStr` sería el mismo día otra vez, pero
       // EventModal interpreta cualquier `end` de día completo como
@@ -172,11 +219,14 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
     }
   }
 
-  // Clic en el hueco vacío de un día en vista mes (en vista día no hace
-  // falta: crear ahí ya pasa por `select`, con hora incluida).
+  // Clic en el hueco vacío de un día en vista mes. En vista día, en escritorio
+  // crear pasa por `select` (arrastrar un hueco); en móvil un toque suelto en
+  // un hueco coloca (o mueve) el borrador de 1 h.
   function handleDateClick(info: DateClickArg) {
     if (info.view.type === 'dayGridMonth') {
       goToDay(info.dateStr)
+    } else if (isMobile && !info.allDay) {
+      setDraft(defaultDraftRange(info.date))
     }
   }
 
@@ -184,6 +234,7 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
   // selector de vista como Mes/Día) — lo hacemos a mano reutilizando la
   // misma clase que ya usa para esos dos, así hereda su estilo tal cual.
   function handleDatesSet(arg: DatesSetArg) {
+    discardDraftIfOutOfView(arg)
     const btn = mainRef.current?.querySelector('.fc-today-button')
     if (!btn) return
     const now = new Date()
@@ -191,7 +242,14 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
     btn.classList.toggle('fc-button-active', isToday)
   }
 
+  // El borrador solo vale para el día que se está viendo: al cambiar de día o
+  // de vista se descarta.
+  function discardDraftIfOutOfView(arg: DatesSetArg) {
+    setDraft(d => (d && (arg.view.type !== 'timeGridDay' || formatLocalDate(d.start) !== formatLocalDate(arg.view.currentStart)) ? null : d))
+  }
+
   function handleEventClick(info: EventClickArg) {
+    if (info.event.id === DRAFT_ID) return // abrir el formulario es cosa de la barra inferior
     if (info.view.type === 'dayGridMonth') {
       if (info.event.start) goToDay(formatLocalDate(info.event.start))
       return
@@ -284,7 +342,16 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
     for (const t of releaseEvents) window.addEventListener(t, capture, true)
   }
 
+  // El borrador se mueve/redimensiona como cualquier evento, pero solo
+  // actualiza `draft` (nada va al servidor). Soltarlo en la franja de "todo el
+  // día" lo convertiría en un evento de día completo: se rechaza.
+  function syncDraft(fcEvent: EventDropArg['event'], revert: () => void) {
+    if (fcEvent.allDay || !fcEvent.start) { revert(); return }
+    setDraft({ start: fcEvent.start, end: fcEvent.end ?? new Date(fcEvent.start.getTime() + 30 * 60_000) })
+  }
+
   function handleEventDrop(info: EventDropArg) {
+    if (info.event.id === DRAFT_ID) { syncDraft(info.event, info.revert); return }
     const from = dropFromRef.current
     dropFromRef.current = null
     if (!commitEventChange(info.event, info.revert) || !from) return
@@ -301,6 +368,7 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
   }
 
   function handleEventResize(info: EventResizeDoneArg) {
+    if (info.event.id === DRAFT_ID) { syncDraft(info.event, info.revert); return }
     commitEventChange(info.event, info.revert)
   }
 
@@ -336,19 +404,69 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
   // render de Calendar, y FullCalendar compara `events` elemento a elemento
   // por identidad — sin memo, objetos nuevos en cada render le obligaban a
   // re-parsear todos los eventos aunque nada hubiera cambiado.
-  const fcEvents = useMemo(() => events.map(e => {
-    const bg = eventColor(e)
-    return {
-      id: e.id,
-      title: e.title,
-      start: e.start,
-      end: e.end,
-      backgroundColor: bg,
-      borderColor: 'transparent',
-      textColor: readableTextColor(bg),
-      extendedProps: { description: e.description },
+  const fcEvents = useMemo(() => {
+    const list: EventInput[] = events.map(e => {
+      const bg = eventColor(e)
+      return {
+        id: e.id,
+        title: e.title,
+        start: e.start,
+        end: e.end,
+        backgroundColor: bg,
+        borderColor: 'transparent',
+        textColor: readableTextColor(bg),
+        extendedProps: { description: e.description },
+      }
+    })
+    if (draft && isMobile) {
+      list.push({
+        id: DRAFT_ID,
+        title: '(Sin título)',
+        start: draft.start,
+        end: draft.end,
+        allDay: false,
+        backgroundColor: primaryColor,
+        borderColor: 'transparent',
+        textColor: readableTextColor(primaryColor),
+        classNames: ['fc-draft'],
+        extendedProps: { description: '' },
+      })
     }
-  }), [events, primaryColor]) // eslint-disable-line react-hooks/exhaustive-deps
+    return list
+  }, [events, primaryColor, draft, isMobile]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mantiene el borrador seleccionado (ver selectDraftEvent): al crearlo o
+  // cambiarlo —FullCalendar vuelve a leer los eventos y pierde la selección—
+  // y tras cualquier toque, porque FullCalendar deselecciona al tocar fuera de
+  // un evento (p. ej. al hacer scroll por la rejilla) y los tiradores
+  // dejarían de responder. Al crearlo el evento puede tardar un par de
+  // fotogramas en existir, de ahí los reintentos.
+  useEffect(() => {
+    if (!draft || !isMobile) return
+    const api = calendarRef.current?.getApi()
+    let raf = 0
+    let tries = 0
+    const attempt = () => {
+      if (selectDraftEvent(api) || ++tries >= 10) return
+      raf = requestAnimationFrame(attempt)
+    }
+    raf = requestAnimationFrame(attempt)
+    // FullCalendar deselecciona en su propio pointerup/touchend: se vuelve a
+    // seleccionar justo después.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const reselect = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => selectDraftEvent(api), 0)
+    }
+    window.addEventListener('pointerup', reselect)
+    window.addEventListener('touchend', reselect)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(timer)
+      window.removeEventListener('pointerup', reselect)
+      window.removeEventListener('touchend', reselect)
+    }
+  }, [draft, isMobile])
 
   return (
     <div className="calendar-container">
@@ -396,6 +514,12 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
           // marcan `draggingEventRef` para que el swipe de mes/día (más
           // abajo) no dispare justo después de soltar.
           editable
+          // Móvil: mantener pulsado ~300 ms (en vez de 1 s, el valor por
+          // defecto de FullCalendar) para arrastrar un evento o un tramo, y
+          // poder redimensionar también desde el borde superior (tirador de
+          // arriba del borrador).
+          longPressDelay={isMobile ? 300 : 1000}
+          eventResizableFromStart={isMobile}
           eventDrop={handleEventDrop}
           eventResize={handleEventResize}
           eventDragStart={handleEventDragStart}
@@ -436,14 +560,25 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
           buttonText={{ today: 'Hoy' }}
         />
 
-        <button
-          type="button"
-          className="calendar-fab"
-          onClick={() => setModal({ open: true })}
-          aria-label="Nuevo evento"
-        >
-          <IconPlus />
-        </button>
+        {draft && isMobile ? (
+          <div className="calendar-draft-bar">
+            <button type="button" className="calendar-draft-open" onClick={openDraft}>
+              <span className="calendar-draft-title">(Sin título)</span>
+              <span className="calendar-draft-time">{formatTimeRange(draft.start, draft.end)}</span>
+              <IconChevronUp />
+            </button>
+            <button type="button" className="calendar-draft-close" onClick={() => setDraft(null)} aria-label="Descartar">×</button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="calendar-fab"
+            onClick={() => setModal({ open: true })}
+            aria-label="Nuevo evento"
+          >
+            <IconPlus />
+          </button>
+        )}
       </div>
 
       {modal.open && (
