@@ -502,6 +502,18 @@
 }
 .fc .fc-event:hover { opacity: 0.82 !important; }
 
+/* Icono de "Todo el día" en el eje de la vista día (ver AllDayIcon en
+   Calendar.tsx): centrado, tono atenuado, sin el tamaño de fuente heredado
+   que partía el texto en dos líneas. */
+.fc .fc-timegrid-axis-cushion { padding: 0 !important; max-width: none !important; }
+.fc .calendar-allday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: var(--muted);
+}
+
 .fc .fc-timegrid-event {
   border-radius: var(--radius-sm) !important;
   padding: 2px 4px !important;

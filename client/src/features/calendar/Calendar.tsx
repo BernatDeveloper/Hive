@@ -20,6 +20,21 @@ const IconPlus = () => (
   </svg>
 )
 
+// Sustituye al texto "Todo el día" del eje de la vista día, que en un eje
+// estrecho se partía en dos líneas. El nombre accesible y el tooltip se
+// conservan.
+const AllDayIcon = () => (
+  <span className="calendar-allday" role="img" aria-label="Todo el día" title="Todo el día">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4"/>
+      <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
+      <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
+      <line x1="4.9" y1="4.9" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.1" y2="19.1"/>
+      <line x1="4.9" y1="19.1" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.1" y2="4.9"/>
+    </svg>
+  </span>
+)
+
 interface Props {
   events: Event[]
   primaryColor?: string
@@ -403,6 +418,7 @@ export default function Calendar({ events, primaryColor = '#3B82F6', conflict, o
           events={fcEvents}
           locale="es"
           locales={[esLocale]}
+          allDayContent={() => <AllDayIcon />}
           // Solo el título en la etiqueta del evento, con o sin hora — la
           // posición en la rejilla de la vista día ya transmite la hora, y
           // en vista mes solo añadía ruido.
