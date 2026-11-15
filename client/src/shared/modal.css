@@ -105,6 +105,30 @@
   justify-content: flex-end;
 }
 
+/* Variante en rejilla (EventModal): la acción principal a todo el ancho y las
+   secundarias repartidas a partes iguales debajo. Con solo dos botones (evento
+   nuevo, sin Eliminar) van ambos en una misma fila. */
+.modal-actions--stacked {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  justify-content: stretch;
+}
+.modal-actions--stacked > * {
+  min-width: 0;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  text-align: center;
+}
+.modal-actions--stacked > :first-child { grid-column: 1 / -1; }
+.modal-actions--stacked > :first-child:nth-last-child(2) { grid-column: auto; }
+.modal-actions--stacked .btn-danger {
+  background: rgba(255, 59, 48, 0.12);
+  color: var(--danger);
+  box-shadow: none;
+}
+.modal-actions--stacked .btn-danger:hover { opacity: 1; background: rgba(255, 59, 48, 0.2); }
+.modal-actions--stacked .btn-ghost { border: 1px solid var(--border); }
+
 /* ── Toggle switch (reutilizable: repetición, notificaciones, ...) ── */
 .modal-toggle-row {
   display: flex;

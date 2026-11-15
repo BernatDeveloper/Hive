@@ -368,7 +368,7 @@ export default function EventModal({ event, start, end, onSave, onDelete, onClos
           rows={3}
         />
 
-        <div className="modal-actions">
+        <div className="modal-actions modal-actions--stacked">
           <button className="btn-primary" onClick={save}>Guardar</button>
           {isEdit && (
             <button
