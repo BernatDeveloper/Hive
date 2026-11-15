@@ -161,16 +161,30 @@
   .modal-actions { flex-wrap: wrap; }
   .modal-actions .btn-primary { flex: 1; text-align: center; }
 
+  /* El div es la ZONA táctil (todo el ancho del panel, 28 px de alto: los
+     márgenes negativos cancelan el padding de 2rem de .modal hasta los
+     bordes y el borde superior); la barrita visible se dibuja con ::before,
+     en la misma posición que antes, para que el contenido no se desplace. */
   .modal-drag-handle {
-    display: block;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    height: 28px;
+    margin: -2rem -2rem 0;
+    padding-top: 0.9rem;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    touch-action: none;
+  }
+  .modal-drag-handle::before {
+    content: '';
     width: 36px;
     height: 4px;
     border-radius: 999px;
     background: var(--border);
-    margin: -1.1rem auto 0.6rem;
-    flex-shrink: 0;
-    touch-action: none;
   }
+  /* El "×" cae dentro de la zona de arrastre: que siga siendo pulsable. */
+  .modal-close { z-index: 1; }
 }
 
 @keyframes slideUpModal {
