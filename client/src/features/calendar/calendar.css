@@ -328,9 +328,13 @@
   transition: background var(--transition-fast), box-shadow var(--transition-fast) !important;
   box-shadow: var(--shadow-sm) !important;
 }
-.fc .fc-button:hover:not(:disabled) {
-  background: var(--surface-2) !important;
-  box-shadow: var(--shadow-md) !important;
+/* Hover solo con puntero real: en táctil el :hover se queda "pegado" tras un
+   toque y dejaba el botón en su estado de hover hasta tocar otra cosa. */
+@media (hover: hover) {
+  .fc .fc-button:hover:not(:disabled) {
+    background: var(--surface-2) !important;
+    box-shadow: var(--shadow-md) !important;
+  }
 }
 .fc .fc-button:focus { box-shadow: none !important; outline: none !important; }
 .fc .fc-button-active {
@@ -338,6 +342,15 @@
   border-color: transparent !important;
   color: var(--primary-text) !important;
   box-shadow: 0 2px 8px rgba(var(--primary-rgb),0.3) !important;
+}
+/* La regla de hover de arriba tiene más especificidad que .fc-button-active
+   (:hover + :not(:disabled)) y lo pintaba de gris, como si estuviera apagado.
+   El activo conserva su color en hover; solo se intensifica un poco. */
+.fc .fc-button-active:hover:not(:disabled) {
+  background: var(--primary) !important;
+  color: var(--primary-text) !important;
+  box-shadow: 0 3px 12px rgba(var(--primary-rgb),0.4) !important;
+  filter: brightness(1.06);
 }
 /* FullCalendar deshabilita (y atenúa con opacity) el botón "Hoy" cuando hoy
    ya está a la vista — justo cuando lo marcamos como activo (datesSet en
